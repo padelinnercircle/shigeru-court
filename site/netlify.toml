@@ -1,0 +1,12 @@
+# Used when Netlify's Base directory is set to "site".
+# Publishes this folder as-is; there is no build step.
+[build]
+  publish = "."
+  command = ""
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "DENY"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
