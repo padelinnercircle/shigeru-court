@@ -290,6 +290,90 @@ language sql stable security definer set search_path = '' as $$
 $$;
 grant execute on function public.get_schedule_v3(timestamptz, timestamptz) to anon, authenticated;
 
+-- ---------------------------------------------------------------------------
+-- Four player spots: 1 = booker, 2-4 = managers (players) or guests.
+-- Guests carry a name and an optional email: [{"name": "...", "email": "..."|null}]
+alter table public.bookings add column if not exists guest_entries jsonb not null default '[]'::jsonb;
+
+create or replace function public.reset_booking_players()
+returns trigger language plpgsql security definer set search_path = '' as $$
+begin
+  new.players := '{}';
+  new.guests := '{}';
+  new.guest_entries := '[]'::jsonb;
+  return new;
+end;
+$$;
+
+create or replace function public.set_booking_party(p_booking uuid, p_members text[], p_guests jsonb)
+returns integer language plpgsql security definer set search_path = '' as $$
+declare
+  b public.bookings; mem text[]; g jsonb := '[]'::jsonb; item jsonb;
+  nm text; em text; bad text; total int;
+begin
+  select * into b from public.bookings where id = p_booking;
+  if b.id is null or b.status <> 'confirmed' then raise exception 'Booking not found.'; end if;
+  if b.user_id is distinct from auth.uid() and not public.is_admin() then
+    raise exception 'Only the person who booked can change who is playing.';
+  end if;
+  if b.ends_at <= now() then raise exception 'Past bookings cannot be changed.'; end if;
+  select coalesce(array_agg(x order by x), '{}') into mem from (
+    select distinct lower(btrim(e)) as x from unnest(coalesce(p_members, '{}')) e
+    where btrim(e) <> '' and lower(btrim(e)) <> b.email) s;
+  select e into bad from unnest(mem) e
+  where not exists (select 1 from public.approved_emails a where a.email = e and a.can_book) limit 1;
+  if bad is not null then raise exception '% is not a manager on the site.', bad; end if;
+  if p_guests is not null and jsonb_typeof(p_guests) <> 'array' then raise exception 'Invalid guest list.'; end if;
+  for item in select * from jsonb_array_elements(coalesce(p_guests, '[]'::jsonb)) loop
+    nm := regexp_replace(btrim(coalesce(item ->> 'name', '')), '\s+', ' ', 'g');
+    em := lower(btrim(coalesce(item ->> 'email', '')));
+    if nm = '' then raise exception 'Each guest needs a name.'; end if;
+    if char_length(nm) > 60 then raise exception 'Guest names must be under 60 characters.'; end if;
+    if em <> '' and (em !~ '^[^@\s]+@[^@\s]+\.[^@\s]+$' or char_length(em) > 254) then
+      raise exception '"%" is not a valid email address.', em;
+    end if;
+    if em <> '' and em = b.email then raise exception 'You are already in this booking.'; end if;
+    if em <> '' and exists (select 1 from public.approved_emails a where a.email = em and a.can_book) then
+      if not (em = any(mem)) then mem := array_append(mem, em); end if;
+    else
+      g := g || jsonb_build_array(jsonb_build_object('name', nm, 'email', nullif(em, '')));
+    end if;
+  end loop;
+  total := coalesce(array_length(mem, 1), 0) + jsonb_array_length(g);
+  if total > 3 then raise exception 'A booking can have up to 4 players: you plus 3 others.'; end if;
+  update public.bookings set players = mem, guests = '{}', guest_entries = g where id = p_booking;
+  return total;
+end;
+$$;
+revoke execute on function public.set_booking_party(uuid, text[], jsonb) from public, anon;
+grant execute on function public.set_booking_party(uuid, text[], jsonb) to authenticated;
+
+create or replace function public.get_schedule_v4(p_from timestamptz, p_to timestamptz)
+returns table (id uuid, starts_at timestamptz, ends_at timestamptz, booker_name text, note text,
+               is_mine boolean, is_player boolean, players text[], player_emails text[], guest_entries jsonb)
+language sql stable security definer set search_path = '' as $$
+  with me as (
+    select exists (select 1 from public.approved_emails a where a.email = public.current_email()) as approved,
+           public.current_email() as email
+  )
+  select b.id, b.starts_at, b.ends_at,
+         case when me.approved then b.booker_name end,
+         case when me.approved then b.note end,
+         (b.user_id = auth.uid()),
+         (me.email <> '' and me.email = any(b.players)),
+         case when me.approved then coalesce((
+           select array_agg(coalesce(nullif(btrim(a.full_name), ''), split_part(p.e, '@', 1)) order by p.ord)
+           from unnest(b.players) with ordinality as p(e, ord)
+           left join public.approved_emails a on a.email = p.e), '{}') else '{}' end,
+         case when me.approved then b.players else '{}' end,
+         case when me.approved then b.guest_entries else '[]'::jsonb end
+  from public.bookings b, me
+  where b.status = 'confirmed' and b.ends_at > p_from and b.starts_at < p_to
+    and p_to - p_from <= interval '62 days'
+  order by b.starts_at;
+$$;
+grant execute on function public.get_schedule_v4(timestamptz, timestamptz) to anon, authenticated;
+
 -- First admin: replace with the real admin email before running.
 insert into public.approved_emails (email, full_name, can_book, is_admin, notify_on_booking)
 values ('admin@example.com', 'Court Admin', true, true, true);

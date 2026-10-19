@@ -54,7 +54,12 @@ Deno.serve(async (req) => {
   const { data: list } = await admin.from("approved_emails").select("email").eq("notify_on_booking", true);
   const players: string[] = Array.isArray(b.players) ? b.players : [];
   const guests: string[] = Array.isArray(b.guests) ? b.guests : [];
-  const guestEmails = guests.filter((g) => g.includes("@"));   // name-only guests are never emailed
+  const guestEntries: { name?: string; email?: string | null }[] = Array.isArray(b.guest_entries) ? b.guest_entries : [];
+  // Guests without an email are shown on the booking but never emailed.
+  const guestEmails = [
+    ...guestEntries.filter((g) => g && g.email).map((g) => String(g.email).toLowerCase()),
+    ...guests.filter((g) => g.includes("@")),
+  ];
   const party = [...players, ...guestEmails];
   const added = event === "added" ? Array.from(new Set((body.emails ?? []).map((e) => String(e).toLowerCase().trim()))).filter((e) => party.includes(e)) : [];
   if (event === "added" && !added.length) return json({ skipped: "no_new_players" });
@@ -65,7 +70,11 @@ Deno.serve(async (req) => {
     const byEmail = new Map((pn ?? []).map((r) => [r.email, r.full_name || r.email.split("@")[0]]));
     playerNames = players.map((e) => byEmail.get(e) ?? e.split("@")[0]);
   }
-  playerNames = [...playerNames, ...guests.map((g) => (g.includes("@") ? `${g} (guest)` : g))];
+  playerNames = [
+    ...playerNames,
+    ...guestEntries.filter((g) => g && g.name).map((g) => `${g.name} (guest)`),
+    ...guests.map((g) => (g.includes("@") ? `${g} (guest)` : g)),
+  ];
 
   const isAdded = event === "added";
   const isNew = event === "created" || isAdded;
