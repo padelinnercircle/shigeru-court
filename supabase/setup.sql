@@ -24,7 +24,7 @@ create table public.approved_emails (
   full_name text check (char_length(full_name) <= 80),
   can_book boolean not null default true,
   is_admin boolean not null default false,
-  notify_on_booking boolean not null default false,
+  notify_on_booking boolean not null default true,
   created_at timestamptz not null default now()
 );
 
@@ -181,6 +181,29 @@ grant execute on function public.cancel_booking(uuid) to authenticated;
 grant execute on function public.my_access() to authenticated;
 grant execute on function public.get_schedule(timestamptz, timestamptz) to anon, authenticated;
 grant execute on function public.check_email_approved(text) to anon, authenticated;
+
+create or replace function public.my_profile()
+returns table (email text, full_name text, can_book boolean, is_admin boolean, notify_on_booking boolean)
+language sql stable security definer set search_path = '' as $$
+  select a.email, a.full_name, a.can_book, a.is_admin, a.notify_on_booking
+  from public.approved_emails a where a.email = public.current_email();
+$$;
+revoke execute on function public.my_profile() from public, anon;
+grant execute on function public.my_profile() to authenticated;
+
+-- Each approved person can switch their own booking emails on or off.
+create or replace function public.set_my_notifications(p_on boolean)
+returns boolean language plpgsql security definer set search_path = '' as $$
+declare n int;
+begin
+  update public.approved_emails set notify_on_booking = p_on where email = public.current_email();
+  get diagnostics n = row_count;
+  if n = 0 then raise exception 'Your email is not on the approved list.'; end if;
+  return p_on;
+end;
+$$;
+revoke execute on function public.set_my_notifications(boolean) from public, anon;
+grant execute on function public.set_my_notifications(boolean) to authenticated;
 
 -- First admin: replace with the real admin email before running.
 insert into public.approved_emails (email, full_name, can_book, is_admin, notify_on_booking)

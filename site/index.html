@@ -161,6 +161,11 @@ input[type=checkbox]{accent-color:var(--ink);width:16px;height:16px}
   opacity:0;transition:opacity .2s,transform .2s;z-index:60;max-width:calc(100% - 32px)}
 .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
 
+@media (max-width:520px){
+  .brand-name{display:none}
+  .nav{gap:2px}
+  .btn.small{padding:0 10px;letter-spacing:.12em;font-size:10px}
+}
 @media (max-width:820px){
   .wrap{padding:0 16px}
   .hero{grid-template-columns:1fr;padding:28px 0 22px}
@@ -185,6 +190,7 @@ input[type=checkbox]{accent-color:var(--ink);width:16px;height:16px}
     <a class="brand" href="./"><span class="brand-mark">H</span><span class="brand-name">House by Shigeru Ban</span></a>
     <nav class="nav">
       <span class="who" id="who"></span>
+      <button class="btn ghost small" id="notifyBtn" hidden title="Email me whenever the court is booked or cancelled">Emails: on</button>
       <button class="btn ghost small" id="adminBtn" hidden>Manage</button>
       <button class="btn small" id="authBtn">Sign in</button>
     </nav>
@@ -286,7 +292,7 @@ input[type=checkbox]{accent-color:var(--ink);width:16px;height:16px}
       </div>
       <div class="checks">
         <label><input type="checkbox" id="addCanBook" checked> Can book</label>
-        <label><input type="checkbox" id="addNotify"> Notify on bookings</label>
+        <label><input type="checkbox" id="addNotify" checked> Notify on bookings</label>
         <label><input type="checkbox" id="addAdmin"> Admin</label>
       </div>
       <p class="err" id="peopleErr"></p>
@@ -396,9 +402,10 @@ function mapBooking(b) {
 }
 async function loadAccess() {
   state.access = null;
-  if (DEMO) { state.access = { email: "admin@example.com", full_name: "Demo Admin", can_book: true, is_admin: true }; return; }
+  if (DEMO) { state.access = { email: "admin@example.com", full_name: "Demo Admin", can_book: true, is_admin: true, notify_on_booking: true }; return; }
   if (!state.session || !sb) return;
-  const { data } = await sb.rpc("my_access");
+  let { data, error } = await sb.rpc("my_profile");
+  if (error) ({ data } = await sb.rpc("my_access"));
   state.access = (data && data[0]) || null;
 }
 async function refresh() { buildDays(); await loadBookings(); render(); }
@@ -505,6 +512,8 @@ function renderChrome() {
   $("authBtn").textContent = signed ? "Sign out" : "Sign in";
   $("who").textContent = signed ? (state.access?.full_name || state.session?.user?.email || "") : "";
   $("adminBtn").hidden = !isAdmin();
+  const nb = $("notifyBtn"); nb.hidden = !approved() || state.access?.notify_on_booking === undefined;
+  if (!nb.hidden) { const on = !!state.access.notify_on_booking; nb.textContent = on ? "Emails: on" : "Emails: off"; nb.setAttribute("aria-pressed", on ? "true" : "false"); nb.style.color = on ? "" : "var(--muted)"; }
   $("hint").textContent = !signed ? "Sign in to see who's playing and to book" : canBook() ? "Tap any open time to book it" : "Your email isn't approved to book";
   if (state.loadError) showBanner(`<strong>The schedule couldn't be loaded</strong>, so open times may not be accurate. Refresh the page in a minute. (${esc(state.loadError)})`);
   else if (signed && !DEMO && !approved()) showBanner(`You're signed in as <strong>${esc(state.session?.user?.email)}</strong>, which isn't on the approved list. Ask the building admin to add you.`);
@@ -672,6 +681,17 @@ $("authVerify").onclick = async () => {
 $("authCode").addEventListener("keydown", (e) => { if (e.key === "Enter") $("authVerify").click(); });
 
 /* ---------- Admin ---------- */
+$("notifyBtn").onclick = async () => {
+  const want = !state.access?.notify_on_booking;
+  if (DEMO) { state.access.notify_on_booking = want; renderChrome(); toast(want ? "You'll be emailed about every booking." : "Booking emails turned off."); return; }
+  const btn = $("notifyBtn"); btn.disabled = true;
+  try {
+    const { error } = await sb.rpc("set_my_notifications", { p_on: want }); if (error) throw error;
+    state.access.notify_on_booking = want; renderChrome();
+    toast(want ? "You'll be emailed about every booking and cancellation." : "Booking emails turned off. You'll still get emails for your own bookings.");
+  } catch (e) { toast(e.message || "Couldn't change the setting."); }
+  finally { btn.disabled = false; }
+};
 $("adminBtn").onclick = async () => { await loadPeople(); fillRules(); openModal("adminScrim"); };
 document.querySelectorAll(".tab").forEach((t) => t.onclick = () => {
   document.querySelectorAll(".tab").forEach((x) => x.classList.toggle("on", x === t));
