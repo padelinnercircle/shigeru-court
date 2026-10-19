@@ -9,6 +9,36 @@ const cors = {
 };
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { ...cors, "Content-Type": "application/json" } });
+// --- calendar helpers ---------------------------------------------------
+const icsDate = (d: string | Date) => new Date(d).toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
+const icsText = (s: string) => String(s ?? "").replace(/\\/g, "\\\\").replace(/;/g, "\\;").replace(/,/g, "\\,").replace(/\r?\n/g, "\\n");
+// RFC 5545: lines longer than 75 octets are folded with CRLF + space
+const fold = (line: string) => { const out: string[] = []; let cur = ""; for (const ch of line) { if (new TextEncoder().encode(cur + ch).length > 74) { out.push(cur); cur = " " + ch; } else cur += ch; } out.push(cur); return out.join("\r\n"); };
+const EVENT_TITLE = "Padel Court - House";
+const EVENT_LOCATION = "House by Shigeru Ban, 224 NE 59th St, Miami, FL 33137";
+function buildIcs(o: { uid: string; start: string; end: string; description: string; cancelled: boolean }) {
+  const lines = [
+    "BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//House by Shigeru Ban//Padel Court//EN", "CALSCALE:GREGORIAN", "METHOD:PUBLISH",
+    "BEGIN:VEVENT",
+    `UID:${o.uid}`, `DTSTAMP:${icsDate(new Date())}`, `DTSTART:${icsDate(o.start)}`, `DTEND:${icsDate(o.end)}`,
+    `SUMMARY:${icsText((o.cancelled ? "CANCELLED: " : "") + EVENT_TITLE)}`,
+    `LOCATION:${icsText(EVENT_LOCATION)}`,
+    `DESCRIPTION:${icsText(o.description)}`,
+    `STATUS:${o.cancelled ? "CANCELLED" : "CONFIRMED"}`, `SEQUENCE:${o.cancelled ? 1 : 0}`,
+    ...(o.cancelled ? [] : ["BEGIN:VALARM", "TRIGGER:-PT60M", "ACTION:DISPLAY", `DESCRIPTION:${icsText(EVENT_TITLE)}`, "END:VALARM"]),
+    "END:VEVENT", "END:VCALENDAR",
+  ];
+  return lines.map(fold).join("\r\n") + "\r\n";
+}
+const googleLink = (start: string, end: string, details: string) =>
+  "https://calendar.google.com/calendar/render?action=TEMPLATE" +
+  `&text=${encodeURIComponent(EVENT_TITLE)}&dates=${icsDate(start)}/${icsDate(end)}` +
+  `&details=${encodeURIComponent(details)}&location=${encodeURIComponent(EVENT_LOCATION)}`;
+const outlookLink = (start: string, end: string, details: string) =>
+  "https://outlook.live.com/calendar/0/deeplink/compose?path=%2Fcalendar%2Faction%2Fcompose&rru=addevent" +
+  `&subject=${encodeURIComponent(EVENT_TITLE)}&startdt=${encodeURIComponent(new Date(start).toISOString())}` +
+  `&enddt=${encodeURIComponent(new Date(end).toISOString())}&body=${encodeURIComponent(details)}&location=${encodeURIComponent(EVENT_LOCATION)}`;
+
 const esc = (s: string) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]!));
 
 Deno.serve(async (req) => {
@@ -85,6 +115,12 @@ Deno.serve(async (req) => {
   const who = b.booker_name ?? b.email;
   const text = `${isAdded ? `${b.booker_name ?? b.email} added you to this booking` : isNew ? "Court booked" : "Booking cancelled"}\n${when}\nBooked by ${who} (${b.email})${playerNames.length ? `\nPlaying with: ${playerNames.join(", ")}` : ""}${b.note ? `\nComment: ${b.note}` : ""}${!isNew ? `\nCancelled by ${b.cancelled_by ?? ""}\nThis time is open again.` : ""}${siteUrl ? `\n\nSchedule: ${siteUrl}` : ""}\n\nHouse by Shigeru Ban - 224 NE 59th St, Miami, FL 33137`;
 
+  const calDetails = [`Booked by ${who}`, playerNames.length ? `Playing with: ${playerNames.join(", ")}` : "", b.note ? `Comment: ${b.note}` : "", siteUrl ? `Schedule: ${siteUrl}` : ""].filter(Boolean).join("\n");
+  const ics = buildIcs({ uid: `${b.id}@shigeru-court`, start: b.starts_at, end: b.ends_at, description: calDetails, cancelled: !isNew });
+  const gLink = googleLink(b.starts_at, b.ends_at, calDetails), oLink = outlookLink(b.starts_at, b.ends_at, calDetails);
+  const aLink = `${url}/functions/v1/booking-ics?id=${b.id}`;   // opens straight into Apple Calendar
+  const textWithCal = isNew ? `${text}\n\nAdd to Google Calendar: ${gLink}\nAdd to Apple Calendar: ${aLink}\nAdd to Outlook: ${oLink}` : text;
+
   const F = "Helvetica,Arial,sans-serif", S = "Georgia,'Times New Roman',serif";
   const row = (label: string, value: string) => `<tr>
       <td valign="top" style="padding:14px 0;border-bottom:1px solid #EDE6DA;width:120px;font:500 10.5px/1.6 ${F};letter-spacing:2.5px;text-transform:uppercase;color:#958B7E;">${label}</td>
@@ -109,6 +145,15 @@ Deno.serve(async (req) => {
       ${b.note ? row("Comment", `<span style="font-style:italic;color:#5E574E;border-left:2px solid #C9A57E;padding-left:12px;display:inline-block;">&ldquo;${esc(b.note)}&rdquo;</span>`) : ""}
       ${!isNew ? row("Cancelled by", esc(b.cancelled_by ?? "")) : ""}
     </table>
+    ${isNew ? `<p style="margin:28px 0 10px 0;font:500 10.5px/1.2 ${F};letter-spacing:2.5px;text-transform:uppercase;color:#958B7E;">Add to your calendar</p>
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>
+      <td style="border:1px solid #24211D;"><a href="${esc(gLink)}" style="display:inline-block;padding:12px 16px;font:500 11px/1 ${F};letter-spacing:2px;text-transform:uppercase;color:#24211D;text-decoration:none;">Google</a></td>
+      <td style="width:8px;"></td>
+      <td style="border:1px solid #24211D;"><a href="${esc(aLink)}" style="display:inline-block;padding:12px 16px;font:500 11px/1 ${F};letter-spacing:2px;text-transform:uppercase;color:#24211D;text-decoration:none;">Apple</a></td>
+      <td style="width:8px;"></td>
+      <td style="border:1px solid #24211D;"><a href="${esc(oLink)}" style="display:inline-block;padding:12px 16px;font:500 11px/1 ${F};letter-spacing:2px;text-transform:uppercase;color:#24211D;text-decoration:none;">Outlook</a></td>
+    </tr></table>
+    <p style="margin:8px 0 0 0;font:300 12px/1.5 ${F};color:#958B7E;">Any other calendar app: open the attached <strong>court.ics</strong> file.</p>` : `<p style="margin:24px 0 0 0;font:300 12px/1.5 ${F};color:#958B7E;">If you added this to your calendar, open the attached <strong>court.ics</strong> to mark it cancelled, or delete the event.</p>`}
     ${siteUrl ? `<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin-top:28px;"><tr><td style="background:#24211D;">
       <a href="${esc(siteUrl)}" style="display:inline-block;padding:15px 26px;font:500 11.5px/1 ${F};letter-spacing:3px;text-transform:uppercase;color:#F6F2EB;text-decoration:none;">Open the schedule</a>
     </td></tr></table>` : ""}
@@ -124,13 +169,21 @@ Deno.serve(async (req) => {
     const client = new SMTPClient({ connection: { hostname: smtpHost, port: 465, tls: true, auth: { username: smtpUser, password: smtpPass } } });
     try {
       for (const to of recipients) {
-        try { await client.send({ from: `${fromName} <${smtpUser}>`, to, subject, content: text, html }); sent++; }
-        catch (e) { failed.push({ to, error: String(e) }); }
+        try {
+          try {
+            await client.send({ from: `${fromName} <${smtpUser}>`, to, subject, content: textWithCal, html,
+              attachments: [{ contentType: "text/calendar; charset=utf-8; method=PUBLISH", filename: "court.ics", encoding: "text", content: ics }] });
+          } catch (_attachErr) {
+            // never let the calendar file stop the email itself
+            await client.send({ from: `${fromName} <${smtpUser}>`, to, subject, content: textWithCal, html });
+          }
+          sent++;
+        } catch (e) { failed.push({ to, error: String(e) }); }
       }
     } finally { try { await client.close(); } catch { /* ignore */ } }
   } else if (resendKey && resendFrom) {
     for (const to of recipients) {
-      const r = await fetch("https://api.resend.com/emails", { method: "POST", headers: { Authorization: `Bearer ${resendKey}`, "Content-Type": "application/json" }, body: JSON.stringify({ from: resendFrom, to: [to], subject, html, text }) });
+      const r = await fetch("https://api.resend.com/emails", { method: "POST", headers: { Authorization: `Bearer ${resendKey}`, "Content-Type": "application/json" }, body: JSON.stringify({ from: resendFrom, to: [to], subject, html, text: textWithCal, attachments: [{ filename: "court.ics", content: btoa(unescape(encodeURIComponent(ics))) }] }) });
       if (r.ok) sent++; else failed.push({ to, status: r.status });
     }
   } else {
