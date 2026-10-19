@@ -64,7 +64,7 @@ The court's sending account is **housepadelcourt@gmail.com**. Do 2b and 2c signe
 
 ## Part 3: Make Supabase send sign-in emails through Gmail
 
-Supabase's built-in mailer only emails people in your Supabase organization, so residents would never get their code. This part fixes that.
+Supabase's built-in mailer only emails people in your Supabase organization, so the rest of the team would never get their code. This part fixes that.
 
 ### 3a. SMTP settings
 Open **Supabase → Authentication → Emails → SMTP Settings**
