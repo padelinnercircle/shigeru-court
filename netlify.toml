@@ -1,0 +1,12 @@
+# Netlify publishes ONLY the site/ folder. Setup notes, database SQL and
+# email templates in this repo are never served publicly.
+[build]
+  publish = "site"
+  command = ""
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "DENY"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"

@@ -1,0 +1,758 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>The Court — House by Shigeru Ban</title>
+<meta name="description" content="Court schedule and bookings for House by Shigeru Ban, 224 NE 59th St, Miami.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=Jost:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#F6F2EB; --paper-2:#EFE8DD; --card:#FBF9F5; --ink:#24211D; --ink-2:#5E574E; --muted:#958B7E;
+  --line:#E2D9CB; --line-2:#EDE6DA; --timber:#A57C52; --timber-2:#C9A57E; --timber-tint:#EFE2D1;
+  --sage:#6F7F63; --sage-tint:#E4E8DD; --mine:#2E3A2B; --danger:#9B3B2E; --now:#B5482F;
+  --serif:"Cormorant Garamond",Georgia,"Times New Roman",serif; --sans:"Jost","Helvetica Neue",Arial,sans-serif;
+  --row:26px; --timecol:62px;
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{margin:0}
+body{background:var(--paper);color:var(--ink);font-family:var(--sans);font-weight:400;-webkit-font-smoothing:antialiased;min-height:100vh}
+button,input,select,textarea{font:inherit;color:inherit}
+.eyebrow{font:500 11px/1.2 var(--sans);letter-spacing:.22em;text-transform:uppercase;color:var(--timber)}
+.wrap{max-width:1320px;margin:0 auto;padding:0 28px}
+
+/* Header */
+header.top{border-bottom:1px solid var(--line)}
+.topbar{display:flex;align-items:center;justify-content:space-between;gap:16px;height:64px}
+.brand{display:flex;align-items:center;gap:12px;text-decoration:none;color:var(--ink)}
+.brand-mark{width:30px;height:30px;border:1px solid var(--ink);display:grid;place-items:center;font:500 15px var(--serif)}
+.brand-name{font:500 12px/1.2 var(--sans);letter-spacing:.26em;text-transform:uppercase}
+.nav{display:flex;align-items:center;gap:10px}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:42px;padding:0 20px;border:1px solid var(--ink);background:transparent;cursor:pointer;
+  font:500 11.5px/1 var(--sans);letter-spacing:.2em;text-transform:uppercase;transition:background .15s,color .15s,border-color .15s;white-space:nowrap}
+.btn:hover{background:var(--ink);color:var(--paper)}
+.btn.solid{background:var(--ink);color:var(--paper)}
+.btn.solid:hover{background:#000}
+.btn.ghost{border-color:transparent}
+.btn.ghost:hover{background:transparent;color:var(--timber)}
+.btn.small{height:34px;padding:0 14px;font-size:10.5px}
+.btn.danger{border-color:var(--danger);color:var(--danger)}
+.btn.danger:hover{background:var(--danger);color:#fff}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.who{font-size:13px;color:var(--ink-2);max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+.hero{display:grid;grid-template-columns:1fr auto;align-items:end;gap:24px;padding:44px 0 30px}
+.hero h1{font:400 clamp(44px,6vw,76px)/.95 var(--serif);margin:12px 0 10px;letter-spacing:-.01em}
+.hero h1 em{font-style:italic;color:var(--timber)}
+.hero p.sub{margin:0;color:var(--ink-2);font-size:15px;font-weight:300;letter-spacing:.02em}
+.status{border:1px solid var(--line);background:var(--card);padding:18px 22px;min-width:280px}
+.status .label{font:500 10.5px var(--sans);letter-spacing:.22em;text-transform:uppercase;color:var(--muted)}
+.status .state{display:flex;align-items:center;gap:10px;font:500 26px/1.1 var(--serif);margin-top:8px}
+.status .dot{width:9px;height:9px;border-radius:50%;background:var(--sage);flex:none}
+.status.busy .dot{background:var(--timber)}
+.status.closed .dot{background:var(--muted)}
+.status .detail{font-size:13px;color:var(--ink-2);margin-top:6px}
+
+.legend{display:flex;flex-wrap:wrap;align-items:center;gap:22px;padding:0 0 16px;font-size:12.5px;color:var(--ink-2)}
+.legend span{display:inline-flex;align-items:center;gap:8px}
+.sw{width:14px;height:14px;border:1px solid var(--line)}
+.sw.free{background:var(--card)}
+.sw.booked{background:var(--timber-tint);border-left:3px solid var(--timber)}
+.sw.mine{background:var(--mine)}
+.sw.swpast{background:repeating-linear-gradient(45deg,var(--paper-2),var(--paper-2) 3px,var(--line-2) 3px,var(--line-2) 6px)}
+.legend .hint{margin-left:auto;color:var(--muted)}
+
+/* Schedule */
+.board{border:1px solid var(--line);background:var(--card);overflow:auto;max-height:calc(100vh - 120px);position:relative}
+.grid{display:grid;grid-template-columns:var(--timecol) repeat(7,minmax(148px,1fr));min-width:calc(var(--timecol) + 7*148px)}
+.dayhead{position:sticky;top:0;z-index:5;background:var(--card);border-bottom:1px solid var(--line);border-left:1px solid var(--line-2);padding:14px 14px 12px}
+.dayhead.corner{border-left:0;left:0;z-index:7}
+.dayhead .dow{font:500 10.5px var(--sans);letter-spacing:.22em;text-transform:uppercase;color:var(--muted)}
+.dayhead .date{display:flex;align-items:baseline;gap:8px;margin-top:4px}
+.dayhead .num{font:400 34px/1 var(--serif)}
+.dayhead .mon{font:400 15px var(--serif);font-style:italic;color:var(--ink-2)}
+.dayhead .sum{font-size:11.5px;color:var(--ink-2);margin-top:6px}
+.dayhead.today .dow{color:var(--timber)}
+.dayhead.today .num{color:var(--timber)}
+.timecol{position:sticky;left:0;z-index:4;background:var(--card);border-right:1px solid var(--line)}
+.tlabel{position:absolute;right:10px;transform:translateY(-50%);font:400 11px var(--sans);color:var(--muted);letter-spacing:.04em;white-space:nowrap}
+.daycol{position:relative;border-left:1px solid var(--line-2);cursor:pointer;
+  background-image:repeating-linear-gradient(to bottom,transparent 0,transparent calc(var(--row)*2 - 1px),var(--line-2) calc(var(--row)*2 - 1px),var(--line-2) calc(var(--row)*2))}
+.daycol.locked{cursor:default}
+.past{position:absolute;left:0;right:0;top:0;pointer-events:none;
+  background:repeating-linear-gradient(45deg,rgba(239,232,221,.85),rgba(239,232,221,.85) 4px,rgba(226,217,203,.6) 4px,rgba(226,217,203,.6) 8px)}
+.nowline{position:absolute;left:-1px;right:0;height:0;border-top:1.5px solid var(--now);z-index:3;pointer-events:none}
+.nowline::before{content:"";position:absolute;left:-4px;top:-4.5px;width:7px;height:7px;border-radius:50%;background:var(--now)}
+.hoverslot{position:absolute;left:4px;right:4px;border:1px dashed var(--timber);background:rgba(165,124,82,.07);display:none;align-items:center;padding:0 10px;
+  font:500 10.5px var(--sans);letter-spacing:.16em;text-transform:uppercase;color:var(--timber);pointer-events:none;z-index:2}
+.bk{position:absolute;left:4px;right:4px;background:var(--timber-tint);border-left:3px solid var(--timber);padding:6px 9px;overflow:hidden;z-index:2;
+  cursor:pointer;transition:box-shadow .15s,transform .15s;text-align:left;border-top:0;border-right:0;border-bottom:0;display:block;width:auto}
+.bk:hover{box-shadow:0 6px 18px rgba(36,33,29,.12);transform:translateY(-1px)}
+.bk .t{font:500 10px/1.2 var(--sans);letter-spacing:.12em;text-transform:uppercase;color:var(--timber)}
+.bk .n{font:500 17px/1.15 var(--serif);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bk .c{font:italic 400 14px/1.25 var(--serif);color:var(--ink-2);margin-top:3px;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.bk.mine{background:var(--mine);border-left-color:var(--timber-2)}
+.bk.mine .t{color:var(--timber-2)}
+.bk.mine .n{color:#F4EFE6}
+.bk.mine .c{color:#CFC7B9}
+.bk.short .c{display:none}
+.bk.tiny{padding:3px 9px;display:flex;align-items:center;gap:8px}
+.bk.tiny .n{margin:0;font-size:15px}
+.bk.tiny .t{flex:none}
+
+.foot{display:flex;flex-wrap:wrap;justify-content:space-between;gap:12px;padding:22px 0 40px;font-size:12px;color:var(--muted);letter-spacing:.04em}
+.banner{margin:0 0 16px;padding:12px 16px;border:1px solid var(--line);background:var(--paper-2);font-size:13px;color:var(--ink-2)}
+.banner a,.linkish{color:var(--ink);text-decoration:underline;text-underline-offset:3px;cursor:pointer;background:none;border:0;padding:0}
+
+/* Modal */
+.scrim{position:fixed;inset:0;background:rgba(36,33,29,.38);display:none;align-items:center;justify-content:center;padding:16px;z-index:50}
+.scrim.open{display:flex}
+.modal{background:var(--card);width:min(520px,100%);max-height:calc(100vh - 32px);overflow:auto;border:1px solid var(--line);box-shadow:0 30px 80px rgba(36,33,29,.25)}
+.modal.wide{width:min(860px,100%)}
+.mhead{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding:26px 28px 6px}
+.mhead h2{font:400 34px/1.05 var(--serif);margin:8px 0 0}
+.x{width:36px;height:36px;border:1px solid var(--line);background:transparent;cursor:pointer;font-size:18px;line-height:1;flex:none}
+.x:hover{border-color:var(--ink)}
+.mbody{padding:16px 28px 28px}
+.field{display:block;margin-bottom:16px}
+.field > span{display:block;font:500 10.5px var(--sans);letter-spacing:.2em;text-transform:uppercase;color:var(--ink-2);margin-bottom:8px}
+.input,select.input,textarea.input{width:100%;height:46px;border:1px solid var(--line);background:#fff;padding:0 14px;font-size:15px;outline:none;border-radius:0}
+textarea.input{height:auto;min-height:84px;padding:12px 14px;resize:vertical;line-height:1.45}
+.input:focus{border-color:var(--ink)}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.days{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;margin-bottom:16px}
+.dchip{border:1px solid var(--line);background:#fff;padding:9px 0 8px;text-align:center;cursor:pointer}
+.dchip .a{display:block;font:500 9.5px var(--sans);letter-spacing:.16em;text-transform:uppercase;color:var(--muted)}
+.dchip .b{display:block;font:400 22px/1.1 var(--serif);margin-top:2px}
+.dchip.on{background:var(--ink);border-color:var(--ink);color:var(--paper)}
+.dchip.on .a{color:var(--timber-2)}
+.dchip:disabled{opacity:.4;cursor:not-allowed}
+.summary{border-top:1px solid var(--line);border-bottom:1px solid var(--line);padding:14px 0;margin:4px 0 18px;font:400 21px var(--serif)}
+.summary small{display:block;font:400 12px var(--sans);color:var(--muted);margin-top:4px;letter-spacing:.02em}
+.err{color:var(--danger);font-size:13.5px;margin:0 0 14px;min-height:1px}
+.ok{color:var(--sage);font-size:13.5px;margin:0 0 14px}
+.actions{display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap}
+.counter{float:right;font-size:11px;color:var(--muted);letter-spacing:.04em;text-transform:none}
+.detail-when{font:400 22px var(--serif);margin:4px 0 4px}
+.detail-note{font:italic 400 19px/1.4 var(--serif);color:var(--ink-2);border-left:2px solid var(--timber-2);padding:2px 0 2px 14px;margin:16px 0}
+.meta{font-size:13px;color:var(--muted)}
+.code{letter-spacing:.5em;font-size:22px;text-align:center;font-family:var(--sans)}
+
+/* Admin */
+.tabs{display:flex;gap:22px;border-bottom:1px solid var(--line);margin:0 0 18px}
+.tab{background:none;border:0;padding:0 0 10px;cursor:pointer;font:500 11px var(--sans);letter-spacing:.2em;text-transform:uppercase;color:var(--muted);border-bottom:2px solid transparent;margin-bottom:-1px}
+.tab.on{color:var(--ink);border-bottom-color:var(--ink)}
+table.people{width:100%;border-collapse:collapse;font-size:13.5px}
+table.people th{font:500 10px var(--sans);letter-spacing:.18em;text-transform:uppercase;color:var(--muted);text-align:left;padding:8px 8px;border-bottom:1px solid var(--line);white-space:nowrap}
+table.people td{padding:10px 8px;border-bottom:1px solid var(--line-2);vertical-align:middle}
+table.people td.c{text-align:center}
+table.people .em{font-weight:500;word-break:break-all}
+table.people .nm{color:var(--ink-2);font-size:12.5px}
+.tablewrap{overflow-x:auto}
+.addrow{display:grid;grid-template-columns:1.4fr 1fr auto;gap:8px;margin-bottom:8px}
+.checks{display:flex;flex-wrap:wrap;gap:16px;font-size:13px;color:var(--ink-2);margin:4px 0 18px}
+.checks label{display:inline-flex;align-items:center;gap:6px;cursor:pointer}
+input[type=checkbox]{accent-color:var(--ink);width:16px;height:16px}
+
+.toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%) translateY(20px);background:var(--ink);color:var(--paper);padding:13px 20px;font-size:13.5px;
+  opacity:0;transition:opacity .2s,transform .2s;z-index:60;max-width:calc(100% - 32px)}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+
+@media (max-width:820px){
+  .wrap{padding:0 16px}
+  .hero{grid-template-columns:1fr;padding:28px 0 22px}
+  .status{min-width:0}
+  .legend .hint{margin-left:0;width:100%}
+  .who{display:none}
+  .brand-name{font-size:10.5px;letter-spacing:.2em}
+  .btn{padding:0 14px}
+  .grid{grid-template-columns:var(--timecol) repeat(7,minmax(132px,1fr));min-width:calc(var(--timecol) + 7*132px)}
+  :root{--timecol:52px}
+  .days{gap:4px}
+  .dchip .b{font-size:19px}
+  .mhead,.mbody{padding-left:20px;padding-right:20px}
+  .addrow{grid-template-columns:1fr}
+  .board{max-height:none}
+}
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="wrap topbar">
+    <a class="brand" href="./"><span class="brand-mark">H</span><span class="brand-name">House by Shigeru Ban</span></a>
+    <nav class="nav">
+      <span class="who" id="who"></span>
+      <button class="btn ghost small" id="adminBtn" hidden>Manage</button>
+      <button class="btn small" id="authBtn">Sign in</button>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap">
+  <section class="hero">
+    <div>
+      <div class="eyebrow" id="address">224 NE 59th St · Miami</div>
+      <h1>The <em>Court</em></h1>
+      <p class="sub">Seven days ahead, at a glance. Reserve a time that is open — the residents' calendar does the rest.</p>
+      <div style="margin-top:22px"><button class="btn solid" id="bookBtn">Book the court</button></div>
+    </div>
+    <div class="status" id="status">
+      <div class="label">Right now</div>
+      <div class="state"><span class="dot"></span><span id="statusState">Loading…</span></div>
+      <div class="detail" id="statusDetail">&nbsp;</div>
+    </div>
+  </section>
+
+  <div class="banner" id="banner" hidden></div>
+
+  <div class="legend">
+    <span><i class="sw free"></i>Available</span>
+    <span><i class="sw booked"></i>Booked</span>
+    <span><i class="sw mine"></i>Your booking</span>
+    <span><i class="sw swpast"></i>Past</span>
+    <span class="hint" id="hint">Tap any open time to book it</span>
+  </div>
+
+  <div class="board" id="board"><div class="grid" id="grid"></div></div>
+
+  <div class="foot">
+    <span id="footAddr">House by Shigeru Ban · 224 NE 59th St, Miami, FL 33137</span>
+    <span id="footTz">Times shown in Miami time (ET)</span>
+  </div>
+</main>
+
+<!-- Book modal -->
+<div class="scrim" id="bookScrim"><div class="modal" role="dialog" aria-modal="true" aria-labelledby="bookTitle">
+  <div class="mhead"><div><div class="eyebrow">Reservation</div><h2 id="bookTitle">Book the court</h2></div><button class="x" data-close aria-label="Close">×</button></div>
+  <div class="mbody">
+    <span class="field"><span>Day</span></span>
+    <div class="days" id="bookDays"></div>
+    <div class="row2">
+      <label class="field"><span>Start</span><select class="input" id="bookStart"></select></label>
+      <label class="field"><span>End</span><select class="input" id="bookEnd"></select></label>
+    </div>
+    <label class="field"><span>Comment <em class="counter" id="noteCount">0 / 200</em></span>
+      <textarea class="input" id="bookNote" maxlength="200" placeholder="Who's playing, open spots, coaching session…"></textarea></label>
+    <div class="summary" id="bookSummary"></div>
+    <p class="err" id="bookErr"></p>
+    <div class="actions"><button class="btn" data-close>Cancel</button><button class="btn solid" id="bookSubmit">Confirm booking</button></div>
+  </div>
+</div></div>
+
+<!-- Detail modal -->
+<div class="scrim" id="detailScrim"><div class="modal" role="dialog" aria-modal="true" aria-labelledby="detailName">
+  <div class="mhead"><div><div class="eyebrow">Booking</div><h2 id="detailName"></h2></div><button class="x" data-close aria-label="Close">×</button></div>
+  <div class="mbody">
+    <div class="detail-when" id="detailWhen"></div>
+    <div class="detail-note" id="detailNote"></div>
+    <p class="meta" id="detailMeta"></p>
+    <p class="err" id="detailErr"></p>
+    <div class="actions"><button class="btn" data-close>Close</button><button class="btn danger" id="detailCancel" hidden>Cancel booking</button></div>
+  </div>
+</div></div>
+
+<!-- Sign-in modal -->
+<div class="scrim" id="authScrim"><div class="modal" role="dialog" aria-modal="true" aria-labelledby="authTitle">
+  <div class="mhead"><div><div class="eyebrow">Residents & approved guests</div><h2 id="authTitle">Sign in</h2></div><button class="x" data-close aria-label="Close">×</button></div>
+  <div class="mbody">
+    <div id="authStep1">
+      <p class="meta" style="margin-top:0">Enter the email you were approved with. We'll send you a sign-in code — no password needed.</p>
+      <label class="field"><span>Email</span><input class="input" id="authEmail" type="email" autocomplete="email" placeholder="you@example.com"></label>
+      <p class="err" id="authErr1"></p>
+      <div class="actions"><button class="btn solid" id="authSend">Send code</button></div>
+    </div>
+    <div id="authStep2" hidden>
+      <p class="meta" style="margin-top:0">We sent a code to <strong id="authSentTo"></strong>. Enter it below, or tap the link in the email.</p>
+      <label class="field"><span>Code</span><input class="input code" id="authCode" inputmode="numeric" autocomplete="one-time-code" maxlength="10" placeholder="••••••"></label>
+      <p class="err" id="authErr2"></p>
+      <div class="actions"><button class="btn" id="authBack">Use another email</button><button class="btn solid" id="authVerify">Sign in</button></div>
+    </div>
+  </div>
+</div></div>
+
+<!-- Admin modal -->
+<div class="scrim" id="adminScrim"><div class="modal wide" role="dialog" aria-modal="true" aria-labelledby="adminTitle">
+  <div class="mhead"><div><div class="eyebrow">Administration</div><h2 id="adminTitle">Manage the court</h2></div><button class="x" data-close aria-label="Close">×</button></div>
+  <div class="mbody">
+    <div class="tabs"><button class="tab on" data-tab="people">People</button><button class="tab" data-tab="rules">Booking rules</button></div>
+    <div id="tabPeople">
+      <div class="addrow">
+        <input class="input" id="addEmail" type="email" placeholder="email@example.com">
+        <input class="input" id="addName" placeholder="Full name">
+        <button class="btn solid" id="addBtn">Add</button>
+      </div>
+      <div class="checks">
+        <label><input type="checkbox" id="addCanBook" checked> Can book</label>
+        <label><input type="checkbox" id="addNotify"> Notify on bookings</label>
+        <label><input type="checkbox" id="addAdmin"> Admin</label>
+      </div>
+      <p class="err" id="peopleErr"></p>
+      <div class="tablewrap"><table class="people"><thead><tr><th>Person</th><th class="c">Can book</th><th class="c">Notify</th><th class="c">Admin</th><th></th></tr></thead><tbody id="peopleRows"></tbody></table></div>
+    </div>
+    <div id="tabRules" hidden>
+      <div class="row2">
+        <label class="field"><span>Opens</span><input class="input" type="time" id="rOpen" step="1800"></label>
+        <label class="field"><span>Closes</span><input class="input" type="time" id="rClose" step="1800"></label>
+      </div>
+      <div class="row2">
+        <label class="field"><span>Shortest booking (min)</span><input class="input" type="number" id="rMin" min="15" step="15"></label>
+        <label class="field"><span>Longest booking (min)</span><input class="input" type="number" id="rMax" min="30" step="15"></label>
+      </div>
+      <div class="row2">
+        <label class="field"><span>Book up to (days ahead)</span><input class="input" type="number" id="rWindow" min="1" max="60"></label>
+        <label class="field"><span>Max bookings / person / week</span><input class="input" type="number" id="rWeek" min="0"></label>
+      </div>
+      <p class="meta" style="margin-top:-4px">0 = no weekly limit. Admins are exempt from the weekly limit.</p>
+      <p class="err" id="rulesErr"></p>
+      <div class="actions"><button class="btn solid" id="rulesSave">Save rules</button></div>
+    </div>
+  </div>
+</div></div>
+
+<div class="toast" id="toast"></div>
+
+<script type="module">
+/* ---------- Configuration ---------- */
+const SUPABASE_URL = "https://uaaderuakjvtqhbztoig.supabase.co";
+const SUPABASE_KEY = "sb_publishable_Rf4FIGbOZd1DonxuOudIZw_w6LKyXWj"; // public by design; access is enforced in the database
+const DEMO = new URLSearchParams(location.search).has("demo");
+
+let sb = null, bootError = null;
+if (!DEMO) {
+  try {
+    const { createClient } = await import("https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm");
+    sb = createClient(SUPABASE_URL, SUPABASE_KEY, { auth: { persistSession: true, detectSessionInUrl: true, flowType: "implicit" } });
+  } catch (e) { bootError = "couldn't load the booking library (check your connection)"; }
+}
+
+/* ---------- State ---------- */
+const state = {
+  settings: { court_name: "House by Shigeru Ban — Court", address: "224 NE 59th St, Miami, FL", timezone: "America/New_York",
+    open_time: "07:00", close_time: "22:00", slot_minutes: 30, min_minutes: 30, max_minutes: 180, booking_window_days: 7, max_bookings_per_week: 3 },
+  bookings: [], session: null, access: null, days: [], selected: null, detail: null, people: [],
+};
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const tz = () => state.settings.timezone || "America/New_York";
+const toMin = (t) => { const [h, m] = String(t).split(":").map(Number); return h * 60 + (m || 0); };
+const fmtMin = (m) => { const h = Math.floor(m / 60), mm = m % 60, ap = h >= 12 && h < 24 ? "PM" : "AM"; const h12 = ((h + 11) % 12) + 1; return `${h12}${mm ? ":" + String(mm).padStart(2, "0") : ""} ${ap}`; };
+const fmtMinLong = (m) => { const h = Math.floor(m / 60), mm = m % 60, ap = h >= 12 && h < 24 ? "PM" : "AM"; const h12 = ((h + 11) % 12) + 1; return `${h12}:${String(mm).padStart(2, "0")} ${ap}`; };
+
+/* ---------- Time zone helpers (always Miami time) ---------- */
+function zparts(date) {
+  const p = new Intl.DateTimeFormat("en-US", { timeZone: tz(), year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23" })
+    .formatToParts(date).reduce((a, x) => (a[x.type] = x.value, a), {});
+  return { y: +p.year, mo: +p.month, d: +p.day, h: +p.hour, mi: +p.minute, s: +p.second };
+}
+const ymd = (p) => `${p.y}-${String(p.mo).padStart(2, "0")}-${String(p.d).padStart(2, "0")}`;
+function zonedToDate(dayStr, minutes) {
+  const [y, mo, d] = dayStr.split("-").map(Number);
+  const guess = Date.UTC(y, mo - 1, d, Math.floor(minutes / 60), minutes % 60);
+  let ts = guess;
+  for (let i = 0; i < 2; i++) { const p = zparts(new Date(ts)); const asUtc = Date.UTC(p.y, p.mo - 1, p.d, p.h, p.mi, p.s); ts = guess - (asUtc - ts); }
+  return new Date(ts);
+}
+function localOf(date) { const p = zparts(date); return { day: ymd(p), min: p.h * 60 + p.mi }; }
+function buildDays() {
+  const today = zparts(new Date());
+  const base = Date.UTC(today.y, today.mo - 1, today.d, 12);
+  state.days = Array.from({ length: 7 }, (_, i) => {
+    const dt = new Date(base + i * 86400000);
+    return { key: dt.toISOString().slice(0, 10), dow: dt.toLocaleDateString("en-US", { weekday: "short", timeZone: "UTC" }),
+      dowLong: dt.toLocaleDateString("en-US", { weekday: "long", timeZone: "UTC" }), num: dt.getUTCDate(),
+      mon: dt.toLocaleDateString("en-US", { month: "short", timeZone: "UTC" }), monLong: dt.toLocaleDateString("en-US", { month: "long", timeZone: "UTC" }), i };
+  });
+}
+const nowLocal = () => localOf(new Date());
+
+/* ---------- Data ---------- */
+const approved = () => !!state.access;
+const canBook = () => !!state.access?.can_book;
+const isAdmin = () => !!state.access?.is_admin;
+
+async function loadSettings() {
+  if (DEMO || !sb) return;
+  const { data } = await sb.from("settings").select("*").eq("id", 1).maybeSingle();
+  if (data) state.settings = { ...state.settings, ...data };
+}
+async function loadBookings() {
+  if (DEMO) return demoBookings();
+  if (!sb) { state.loadError = bootError; return; }
+  try { return await loadBookingsInner(); } catch (e) { state.loadError = e.message || "network error"; }
+}
+async function loadBookingsInner() {
+  const from = zonedToDate(state.days[0].key, 0), to = zonedToDate(state.days[6].key, 24 * 60);
+  const { data, error } = await sb.rpc("get_schedule", { p_from: from.toISOString(), p_to: to.toISOString() });
+  if (error) { state.loadError = error.message || "unknown error"; return; }
+  state.loadError = null;
+  state.bookings = (data || []).map(mapBooking);
+}
+function mapBooking(b) {
+  const s = new Date(b.starts_at), e = new Date(b.ends_at), ls = localOf(s), le = localOf(e);
+  return { ...b, day: ls.day, startMin: ls.min, endMin: le.day === ls.day ? le.min : 24 * 60 };
+}
+async function loadAccess() {
+  state.access = null;
+  if (DEMO) { state.access = { email: "admin@example.com", full_name: "Demo Admin", can_book: true, is_admin: true }; return; }
+  if (!state.session || !sb) return;
+  const { data } = await sb.rpc("my_access");
+  state.access = (data && data[0]) || null;
+}
+async function refresh() { buildDays(); await loadBookings(); render(); }
+
+/* ---------- Rendering ---------- */
+const rowH = () => parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--row")) || 26;
+function render() {
+  const s = state.settings, open = toMin(s.open_time), close = toMin(s.close_time), slot = s.slot_minutes;
+  const rows = (close - open) / slot, H = rowH(), height = rows * H, now = nowLocal();
+  $("address").textContent = (s.address || "224 NE 59th St, Miami").split(",")[0] + " · Miami";
+
+  const g = $("grid"); g.innerHTML = "";
+  g.style.setProperty("--row", H + "px");
+  const corner = document.createElement("div"); corner.className = "dayhead corner"; g.appendChild(corner);
+  for (const d of state.days) {
+    const list = state.bookings.filter((b) => b.day === d.key);
+    const bookedMin = list.reduce((a, b) => a + (b.endMin - b.startMin), 0);
+    const el = document.createElement("div"); el.className = "dayhead" + (d.i === 0 ? " today" : "");
+    el.innerHTML = `<div class="dow">${d.i === 0 ? "Today" : d.i === 1 ? "Tomorrow" : esc(d.dowLong)}</div>
+      <div class="date"><span class="num">${d.num}</span><span class="mon">${esc(d.mon)}</span></div>
+      <div class="sum">${list.length ? `${list.length} booking${list.length > 1 ? "s" : ""} · ${fmtHours(close - open - bookedMin)} open` : "Open all day"}</div>`;
+    g.appendChild(el);
+  }
+  const tc = document.createElement("div"); tc.className = "timecol"; tc.style.height = height + "px"; tc.style.position = "sticky";
+  for (let m = open; m <= close; m += 60) {
+    const l = document.createElement("div"); l.className = "tlabel"; l.style.top = ((m - open) / slot) * H + (m === open ? 8 : m === close ? -8 : 0) + "px"; l.textContent = fmtMin(m); tc.appendChild(l);
+  }
+  g.appendChild(tc);
+
+  for (const d of state.days) {
+    const col = document.createElement("div"); col.className = "daycol"; col.style.height = height + "px"; col.dataset.day = d.key;
+    if (d.i >= s.booking_window_days) col.classList.add("locked");
+    if (d.i === 0) {
+      const pastEnd = Math.min(Math.max(now.min, open), close);
+      if (pastEnd > open) { const p = document.createElement("div"); p.className = "past"; p.style.height = ((pastEnd - open) / slot) * H + "px"; col.appendChild(p); }
+      if (now.min > open && now.min < close) { const n = document.createElement("div"); n.className = "nowline"; n.style.top = ((now.min - open) / slot) * H + "px"; col.appendChild(n); }
+    }
+    const ghost = document.createElement("div"); ghost.className = "hoverslot"; ghost.style.height = H * 2 + "px"; ghost.textContent = "+ Book"; col.appendChild(ghost);
+    for (const b of state.bookings.filter((x) => x.day === d.key)) {
+      const top = ((Math.max(b.startMin, open) - open) / slot) * H, h = ((Math.min(b.endMin, close) - Math.max(b.startMin, open)) / slot) * H;
+      const el = document.createElement("button"); el.type = "button";
+      el.className = "bk" + (b.is_mine ? " mine" : "") + (h < H * 2.6 ? " short" : "") + (h < H * 1.6 ? " tiny" : "");
+      el.style.top = top + 1 + "px"; el.style.height = h - 2 + "px";
+      const name = b.booker_name || (approved() ? "Booked" : "Booked");
+      el.innerHTML = `<div class="t">${fmtMin(b.startMin)} – ${fmtMin(b.endMin)}</div><div class="n">${esc(name)}</div>${b.note ? `<div class="c">“${esc(b.note)}”</div>` : ""}`;
+      el.title = `${name} · ${fmtMinLong(b.startMin)} – ${fmtMinLong(b.endMin)}${b.note ? "\n" + b.note : ""}`;
+      el.addEventListener("click", (ev) => { ev.stopPropagation(); openDetail(b); });
+      col.appendChild(el);
+    }
+    col.addEventListener("mousemove", (ev) => hoverGhost(ev, col, d));
+    col.addEventListener("mouseleave", () => { ghost.style.display = "none"; });
+    col.addEventListener("click", (ev) => clickColumn(ev, col, d));
+    g.appendChild(col);
+  }
+  renderStatus(); renderChrome();
+}
+function fmtHours(m) { const h = m / 60; return (Number.isInteger(h) ? h : h.toFixed(1)) + " h"; }
+function minuteAt(ev, col) {
+  const s = state.settings, open = toMin(s.open_time), slot = s.slot_minutes, H = rowH();
+  const y = ev.clientY - col.getBoundingClientRect().top;
+  return open + Math.floor(y / H) * slot;
+}
+function freeRun(dayKey, start) {
+  const s = state.settings, close = toMin(s.close_time), now = nowLocal();
+  if (dayKey === state.days[0].key && start <= now.min) return 0;
+  if (state.bookings.some((b) => b.day === dayKey && start >= b.startMin && start < b.endMin)) return 0;
+  const next = state.bookings.filter((b) => b.day === dayKey && b.startMin >= start).reduce((a, b) => Math.min(a, b.startMin), close);
+  return Math.min(next, close) - start;
+}
+function hoverGhost(ev, col, d) {
+  const ghost = col.querySelector(".hoverslot"); const s = state.settings;
+  if (d.i >= s.booking_window_days || ev.target.closest(".bk")) { ghost.style.display = "none"; return; }
+  const m = minuteAt(ev, col), run = freeRun(d.key, m);
+  if (run < s.min_minutes) { ghost.style.display = "none"; return; }
+  const len = Math.min(run, Math.max(s.min_minutes, Math.min(60, s.max_minutes)));
+  ghost.style.top = ((m - toMin(s.open_time)) / s.slot_minutes) * rowH() + 1 + "px";
+  ghost.style.height = (len / s.slot_minutes) * rowH() - 2 + "px";
+  ghost.textContent = `+ Book ${fmtMin(m)}`; ghost.style.display = "flex";
+}
+function clickColumn(ev, col, d) {
+  const s = state.settings; if (d.i >= s.booking_window_days) return;
+  const m = minuteAt(ev, col); if (freeRun(d.key, m) < s.min_minutes) return;
+  openBook(d.key, m);
+}
+function renderStatus() {
+  const s = state.settings, open = toMin(s.open_time), close = toMin(s.close_time), now = nowLocal(), today = state.days[0]?.key;
+  const el = $("status"); el.classList.remove("busy", "closed");
+  if (state.loadError) { el.classList.add("closed"); $("statusState").textContent = "Schedule unavailable"; $("statusDetail").textContent = "Couldn't reach the booking system. Try again shortly."; return; }
+  const cur = state.bookings.find((b) => b.day === today && now.min >= b.startMin && now.min < b.endMin);
+  const next = state.bookings.filter((b) => b.day === today && b.startMin > now.min).sort((a, b) => a.startMin - b.startMin)[0];
+  if (now.min < open || now.min >= close) {
+    el.classList.add("closed"); $("statusState").textContent = "Closed for booking";
+    $("statusDetail").textContent = now.min < open ? `Opens at ${fmtMinLong(open)}` : `Opens tomorrow at ${fmtMinLong(open)}`;
+  } else if (cur) {
+    el.classList.add("busy"); $("statusState").textContent = "In use";
+    $("statusDetail").textContent = `Until ${fmtMinLong(cur.endMin)}${cur.booker_name ? " · " + cur.booker_name : ""}`;
+  } else {
+    $("statusState").textContent = "Available";
+    $("statusDetail").textContent = next ? `Free until ${fmtMinLong(next.startMin)}` : `Free until ${fmtMinLong(close)}`;
+  }
+}
+function renderChrome() {
+  const signed = !!state.session || DEMO;
+  $("authBtn").textContent = signed ? "Sign out" : "Sign in";
+  $("who").textContent = signed ? (state.access?.full_name || state.session?.user?.email || "") : "";
+  $("adminBtn").hidden = !isAdmin();
+  $("hint").textContent = !signed ? "Sign in to see who's playing and to book" : canBook() ? "Tap any open time to book it" : "Your email isn't approved to book";
+  if (state.loadError) showBanner(`<strong>The schedule couldn't be loaded</strong>, so open times may not be accurate. Refresh the page in a minute. (${esc(state.loadError)})`);
+  else if (signed && !DEMO && !approved()) showBanner(`You're signed in as <strong>${esc(state.session?.user?.email)}</strong>, which isn't on the approved list. Ask the building admin to add you.`);
+  else if (!signed) showBanner(`Open times are shown to everyone. <button class="linkish" id="bannerSignin">Sign in</button> with your approved email to see who has booked, read their comments, and reserve the court.`);
+  else hideBanner();
+  const bs = $("bannerSignin"); if (bs) bs.onclick = () => openAuth();
+}
+function showBanner(html) { const b = $("banner"); b.innerHTML = html; b.hidden = false; }
+function hideBanner() { $("banner").hidden = true; }
+function toast(msg) { const t = $("toast"); t.textContent = msg; t.classList.add("show"); clearTimeout(toast._t); toast._t = setTimeout(() => t.classList.remove("show"), 3200); }
+
+/* ---------- Modals ---------- */
+function openModal(id) { $(id).classList.add("open"); }
+function closeModal(id) { $(id).classList.remove("open"); }
+document.querySelectorAll(".scrim").forEach((sc) => {
+  sc.addEventListener("click", (e) => { if (e.target === sc || e.target.closest("[data-close]")) sc.classList.remove("open"); });
+});
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") document.querySelectorAll(".scrim.open").forEach((s) => s.classList.remove("open")); });
+
+/* ---------- Booking ---------- */
+function openBook(dayKey, startMin) {
+  if (!state.session && !DEMO) { openAuth(); return; }
+  if (!canBook()) { toast("Your email isn't approved to book the court."); return; }
+  const s = state.settings;
+  state.selected = { day: dayKey || firstBookableDay(), start: startMin ?? null };
+  $("bookNote").value = ""; $("noteCount").textContent = "0 / 200"; $("bookErr").textContent = "";
+  renderBookDays(); fillStarts(); openModal("bookScrim");
+}
+function firstBookableDay() {
+  const s = state.settings;
+  for (const d of state.days.slice(0, s.booking_window_days)) if (startOptions(d.key).some((o) => !o.disabled)) return d.key;
+  return state.days[0].key;
+}
+function renderBookDays() {
+  const s = state.settings, box = $("bookDays"); box.innerHTML = "";
+  for (const d of state.days) {
+    const b = document.createElement("button"); b.type = "button"; b.className = "dchip" + (d.key === state.selected.day ? " on" : "");
+    b.disabled = d.i >= s.booking_window_days || !startOptions(d.key).some((o) => !o.disabled);
+    b.innerHTML = `<span class="a">${d.i === 0 ? "Today" : esc(d.dow)}</span><span class="b">${d.num}</span>`;
+    b.onclick = () => { state.selected.day = d.key; state.selected.start = null; renderBookDays(); fillStarts(); };
+    box.appendChild(b);
+  }
+}
+function startOptions(dayKey) {
+  const s = state.settings, open = toMin(s.open_time), close = toMin(s.close_time), out = [];
+  for (let m = open; m + s.min_minutes <= close; m += s.slot_minutes) out.push({ m, disabled: freeRun(dayKey, m) < s.min_minutes });
+  return out;
+}
+function fillStarts() {
+  const sel = $("bookStart"), opts = startOptions(state.selected.day);
+  let start = state.selected.start;
+  if (start == null || opts.find((o) => o.m === start)?.disabled !== false) start = opts.find((o) => !o.disabled)?.m ?? null;
+  state.selected.start = start;
+  sel.innerHTML = opts.map((o) => `<option value="${o.m}" ${o.disabled ? "disabled" : ""} ${o.m === start ? "selected" : ""}>${fmtMinLong(o.m)}${o.disabled ? " — booked" : ""}</option>`).join("");
+  fillEnds();
+}
+function fillEnds(prefer) {
+  const s = state.settings, sel = $("bookEnd"), start = state.selected.start;
+  if (start == null) { sel.innerHTML = ""; updateSummary(); return; }
+  const run = freeRun(state.selected.day, start), maxLen = Math.min(run, s.max_minutes), out = [];
+  for (let len = s.min_minutes; len <= maxLen; len += s.slot_minutes) out.push(len);
+  const want = prefer ?? (out.includes(90) ? 90 : out.includes(60) ? 60 : out[out.length - 1]);
+  sel.innerHTML = out.map((len) => `<option value="${len}" ${len === want ? "selected" : ""}>${fmtMinLong(start + len)} · ${len >= 60 ? (len / 60) + " h" : len + " min"}</option>`).join("");
+  updateSummary();
+}
+function updateSummary() {
+  const d = state.days.find((x) => x.key === state.selected.day), start = state.selected.start, len = +$("bookEnd").value;
+  $("bookSubmit").disabled = start == null || !len;
+  $("bookSummary").innerHTML = start == null ? "No open times left this day." :
+    `${esc(d.dowLong)}, ${esc(d.monLong)} ${d.num} · ${fmtMinLong(start)} – ${fmtMinLong(start + len)}<small>Approved people on the notification list will be emailed.</small>`;
+}
+$("bookStart").onchange = (e) => { state.selected.start = +e.target.value; fillEnds(+$("bookEnd").value || undefined); };
+$("bookEnd").onchange = updateSummary;
+$("bookNote").oninput = (e) => { $("noteCount").textContent = `${e.target.value.length} / 200`; };
+$("bookBtn").onclick = () => openBook();
+$("bookSubmit").onclick = async () => {
+  const btn = $("bookSubmit"), err = $("bookErr"); err.textContent = "";
+  const { day, start } = state.selected, len = +$("bookEnd").value, note = $("bookNote").value.trim() || null;
+  const starts_at = zonedToDate(day, start), ends_at = zonedToDate(day, start + len);
+  btn.disabled = true; btn.textContent = "Booking…";
+  try {
+    if (DEMO) {
+      state.bookings.push(mapBooking({ id: crypto.randomUUID(), starts_at: starts_at.toISOString(), ends_at: ends_at.toISOString(), booker_name: "Demo Admin", note, is_mine: true }));
+    } else {
+      const { data, error } = await sb.from("bookings").insert({ starts_at: starts_at.toISOString(), ends_at: ends_at.toISOString(), note }).select("id").single();
+      if (error) throw error;
+      sb.functions.invoke("notify-booking", { body: { booking_id: data.id, event: "created" } }).catch(() => {});
+      await loadBookings();
+    }
+    closeModal("bookScrim"); render(); toast("Court booked. Notifications are on their way.");
+  } catch (e) {
+    err.textContent = e.code === "23P01" ? "Someone just booked part of that time. Pick another slot." : (e.message || "Couldn't book. Try again.");
+    if (!DEMO) { await loadBookings(); render(); fillStarts(); }
+  } finally { btn.disabled = false; btn.textContent = "Confirm booking"; }
+};
+
+/* ---------- Details / cancel ---------- */
+function openDetail(b) {
+  state.detail = b;
+  const d = state.days.find((x) => x.key === b.day);
+  $("detailName").textContent = b.booker_name || "Booked";
+  $("detailWhen").textContent = `${d ? d.dowLong + ", " + d.monLong + " " + d.num : b.day} · ${fmtMinLong(b.startMin)} – ${fmtMinLong(b.endMin)}`;
+  const noteEl = $("detailNote");
+  if (!approved() && !DEMO) { noteEl.hidden = false; noteEl.textContent = "Sign in with an approved email to see who booked and their comment."; }
+  else if (b.note) { noteEl.hidden = false; noteEl.textContent = `“${b.note}”`; }
+  else noteEl.hidden = true;
+  $("detailMeta").textContent = b.is_mine ? "This is your booking." : "";
+  $("detailErr").textContent = "";
+  const future = zonedToDate(b.day, b.endMin) > new Date();
+  $("detailCancel").hidden = !(future && (b.is_mine || isAdmin()));
+  openModal("detailScrim");
+}
+$("detailCancel").onclick = async () => {
+  const b = state.detail; if (!b) return;
+  if (!confirm(`Cancel ${b.is_mine ? "your" : (b.booker_name || "this") + "'s"} booking on ${b.day} at ${fmtMinLong(b.startMin)}?`)) return;
+  const btn = $("detailCancel"); btn.disabled = true;
+  try {
+    if (DEMO) state.bookings = state.bookings.filter((x) => x.id !== b.id);
+    else {
+      const { error } = await sb.rpc("cancel_booking", { p_id: b.id }); if (error) throw error;
+      sb.functions.invoke("notify-booking", { body: { booking_id: b.id, event: "cancelled" } }).catch(() => {});
+      await loadBookings();
+    }
+    closeModal("detailScrim"); render(); toast("Booking cancelled.");
+  } catch (e) { $("detailErr").textContent = e.message || "Couldn't cancel."; }
+  finally { btn.disabled = false; }
+};
+
+/* ---------- Auth ---------- */
+function openAuth() {
+  if (!DEMO && !sb) { toast("Sign-in isn't available right now. Refresh the page."); return; }
+  $("authStep1").hidden = false; $("authStep2").hidden = true; $("authErr1").textContent = ""; $("authErr2").textContent = "";
+  openModal("authScrim"); setTimeout(() => $("authEmail").focus(), 50);
+}
+$("authBtn").onclick = async () => {
+  if (DEMO) { toast("Demo mode"); return; }
+  if (!sb) { toast("Sign-in isn't available right now. Refresh the page."); return; }
+  if (state.session) { await sb.auth.signOut(); return; }
+  openAuth();
+};
+$("authSend").onclick = async () => {
+  const email = $("authEmail").value.trim().toLowerCase(), err = $("authErr1"), btn = $("authSend"); err.textContent = "";
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { err.textContent = "Enter a valid email address."; return; }
+  btn.disabled = true; btn.textContent = "Checking…";
+  try {
+    const { data: ok, error: e1 } = await sb.rpc("check_email_approved", { p_email: email });
+    if (e1) throw e1;
+    if (!ok) { err.textContent = "That email isn't on the approved list. Ask the building admin to add you."; return; }
+    const { error } = await sb.auth.signInWithOtp({ email, options: { shouldCreateUser: true, emailRedirectTo: location.origin + location.pathname } });
+    if (error) throw error;
+    $("authSentTo").textContent = email; $("authStep1").hidden = true; $("authStep2").hidden = false; setTimeout(() => $("authCode").focus(), 50);
+  } catch (e) { err.textContent = e.message || "Couldn't send the code."; }
+  finally { btn.disabled = false; btn.textContent = "Send code"; }
+};
+$("authEmail").addEventListener("keydown", (e) => { if (e.key === "Enter") $("authSend").click(); });
+$("authBack").onclick = () => { $("authStep1").hidden = false; $("authStep2").hidden = true; };
+$("authVerify").onclick = async () => {
+  const token = $("authCode").value.replace(/\s/g, ""), email = $("authSentTo").textContent, err = $("authErr2"), btn = $("authVerify"); err.textContent = "";
+  if (token.length < 6) { err.textContent = "Enter the code from the email."; return; }
+  btn.disabled = true;
+  try { const { error } = await sb.auth.verifyOtp({ email, token, type: "email" }); if (error) throw error; closeModal("authScrim"); toast("Signed in."); }
+  catch (e) { err.textContent = e.message || "That code didn't work."; }
+  finally { btn.disabled = false; }
+};
+$("authCode").addEventListener("keydown", (e) => { if (e.key === "Enter") $("authVerify").click(); });
+
+/* ---------- Admin ---------- */
+$("adminBtn").onclick = async () => { await loadPeople(); fillRules(); openModal("adminScrim"); };
+document.querySelectorAll(".tab").forEach((t) => t.onclick = () => {
+  document.querySelectorAll(".tab").forEach((x) => x.classList.toggle("on", x === t));
+  $("tabPeople").hidden = t.dataset.tab !== "people"; $("tabRules").hidden = t.dataset.tab !== "rules";
+});
+async function loadPeople() {
+  if (DEMO) { state.people = state.people.length ? state.people : [{ email: "admin@example.com", full_name: "Demo Admin", can_book: true, notify_on_booking: true, is_admin: true }]; renderPeople(); return; }
+  const { data, error } = await sb.from("approved_emails").select("*").order("created_at");
+  if (error) { $("peopleErr").textContent = error.message; return; }
+  state.people = data || []; renderPeople();
+}
+function renderPeople() {
+  const me = state.access?.email;
+  $("peopleRows").innerHTML = state.people.map((p) => `<tr data-email="${esc(p.email)}">
+    <td><div class="em">${esc(p.email)}</div><div class="nm">${esc(p.full_name || "")}</div></td>
+    <td class="c"><input type="checkbox" data-f="can_book" ${p.can_book ? "checked" : ""}></td>
+    <td class="c"><input type="checkbox" data-f="notify_on_booking" ${p.notify_on_booking ? "checked" : ""}></td>
+    <td class="c"><input type="checkbox" data-f="is_admin" ${p.is_admin ? "checked" : ""} ${p.email === me ? "disabled title='You can’t remove your own admin access'" : ""}></td>
+    <td class="c">${p.email === me ? "" : `<button class="btn small danger" data-del>Remove</button>`}</td></tr>`).join("");
+  $("peopleRows").querySelectorAll("input[type=checkbox]").forEach((cb) => cb.onchange = async () => {
+    const email = cb.closest("tr").dataset.email, f = cb.dataset.f; $("peopleErr").textContent = "";
+    if (DEMO) { const p = state.people.find((x) => x.email === email); p[f] = cb.checked; return; }
+    const { error } = await sb.from("approved_emails").update({ [f]: cb.checked }).eq("email", email);
+    if (error) { $("peopleErr").textContent = error.message; cb.checked = !cb.checked; } else toast("Saved.");
+  });
+  $("peopleRows").querySelectorAll("[data-del]").forEach((b) => b.onclick = async () => {
+    const email = b.closest("tr").dataset.email; if (!confirm(`Remove ${email}? They will no longer be able to book.`)) return;
+    if (!DEMO) { const { error } = await sb.from("approved_emails").delete().eq("email", email); if (error) { $("peopleErr").textContent = error.message; return; } }
+    state.people = state.people.filter((x) => x.email !== email); renderPeople(); toast("Removed.");
+  });
+}
+$("addBtn").onclick = async () => {
+  const email = $("addEmail").value.trim().toLowerCase(), full_name = $("addName").value.trim() || null, err = $("peopleErr"); err.textContent = "";
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { err.textContent = "Enter a valid email address."; return; }
+  const row = { email, full_name, can_book: $("addCanBook").checked, notify_on_booking: $("addNotify").checked, is_admin: $("addAdmin").checked };
+  if (DEMO) state.people.push(row);
+  else { const { error } = await sb.from("approved_emails").insert(row); if (error) { err.textContent = error.code === "23505" ? "That email is already on the list." : error.message; return; } await loadPeople(); }
+  $("addEmail").value = ""; $("addName").value = ""; renderPeople(); toast(`${email} added.`);
+};
+function fillRules() {
+  const s = state.settings;
+  $("rOpen").value = String(s.open_time).slice(0, 5); $("rClose").value = String(s.close_time).slice(0, 5);
+  $("rMin").value = s.min_minutes; $("rMax").value = s.max_minutes; $("rWindow").value = s.booking_window_days; $("rWeek").value = s.max_bookings_per_week;
+}
+$("rulesSave").onclick = async () => {
+  const err = $("rulesErr"); err.textContent = "";
+  const upd = { open_time: $("rOpen").value, close_time: $("rClose").value, min_minutes: +$("rMin").value, max_minutes: +$("rMax").value,
+    booking_window_days: +$("rWindow").value, max_bookings_per_week: +$("rWeek").value, updated_at: new Date().toISOString() };
+  if (toMin(upd.close_time) <= toMin(upd.open_time)) { err.textContent = "Closing time must be after opening time."; return; }
+  if (upd.max_minutes < upd.min_minutes) { err.textContent = "Longest booking must be at least the shortest."; return; }
+  if ([upd.open_time, upd.close_time].some((t) => toMin(t) % state.settings.slot_minutes)) { err.textContent = `Use times on the ${state.settings.slot_minutes}-minute mark.`; return; }
+  if (!DEMO) { const { error } = await sb.from("settings").update(upd).eq("id", 1); if (error) { err.textContent = error.message; return; } }
+  state.settings = { ...state.settings, ...upd }; render(); toast("Rules saved.");
+};
+
+/* ---------- Demo data (preview only: add ?demo to the URL) ---------- */
+function demoBookings() {
+  const k = (i) => state.days[i].key, mk = (i, s, e, name, note, mine) => mapBooking({ id: `${i}-${s}`, starts_at: zonedToDate(k(i), s).toISOString(), ends_at: zonedToDate(k(i), e).toISOString(), booker_name: name, note, is_mine: !!mine });
+  state.bookings = [
+    mk(0, 8 * 60, 9 * 60 + 30, "Daniela Ruiz", "Morning doubles — one spot open"),
+    mk(0, 18 * 60, 19 * 60 + 30, "Demo Admin", "Coaching session", true),
+    mk(1, 7 * 60, 8 * 60, "Marc Levin", null),
+    mk(1, 12 * 60, 13 * 60 + 30, "Ana Ferreira", "Lunch match, beginners welcome"),
+    mk(2, 19 * 60, 21 * 60, "Rooftop Social", "Residents' mixer — americano format"),
+    mk(3, 9 * 60, 10 * 60 + 30, "Paolo Bianchi", "Drills"),
+    mk(4, 17 * 60 + 30, 19 * 60, "Demo Admin", "Doubles, one spot open", true),
+    mk(5, 10 * 60, 12 * 60, "Weekend Clinic", "Open clinic for residents — bring water"),
+    mk(5, 16 * 60, 17 * 60, "Lucia Gómez", null),
+    mk(6, 8 * 60 + 30, 10 * 60, "Tom Hale", "Looking for a 4th player"),
+  ];
+}
+
+/* ---------- Boot ---------- */
+buildDays();
+if (!DEMO && sb) {
+  sb.auth.onAuthStateChange(async (_evt, session) => { state.session = session; await loadAccess(); await refresh(); });
+  const { data } = await sb.auth.getSession(); state.session = data.session;
+}
+await loadSettings(); await loadAccess(); await refresh();
+setInterval(refresh, 60000);
+document.addEventListener("visibilitychange", () => { if (!document.hidden) refresh(); });
+</script>
+</body>
+</html>

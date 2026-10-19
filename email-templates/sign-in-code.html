@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="light">
+<title>Your sign-in code · The Court</title>
+</head>
+<body style="margin:0;padding:0;background:#F6F2EB;-webkit-text-size-adjust:100%;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#F6F2EB;">
+  <tr><td align="center" style="padding:40px 16px;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:560px;">
+
+      <!-- Brand bar -->
+      <tr><td style="padding:0 0 22px 0;">
+        <table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>
+          <td width="30" height="30" align="center" valign="middle" style="width:30px;height:30px;border:1px solid #24211D;font:500 15px/30px Georgia,'Times New Roman',serif;color:#24211D;">H</td>
+          <td style="padding-left:12px;font:500 11px/1.2 Helvetica,Arial,sans-serif;letter-spacing:4px;text-transform:uppercase;color:#24211D;">House by Shigeru Ban</td>
+        </tr></table>
+      </td></tr>
+
+      <!-- Card -->
+      <tr><td style="background:#FBF9F5;border:1px solid #E2D9CB;padding:40px 40px 36px 40px;">
+        <p style="margin:0 0 14px 0;font:500 11px/1.2 Helvetica,Arial,sans-serif;letter-spacing:3.5px;text-transform:uppercase;color:#A57C52;">The Court · Sign in</p>
+        <h1 style="margin:0 0 14px 0;font:400 38px/1.05 Georgia,'Times New Roman',serif;color:#24211D;">Your <em style="color:#A57C52;">sign-in</em> code</h1>
+        <p style="margin:0 0 28px 0;font:300 15px/1.6 Helvetica,Arial,sans-serif;color:#5E574E;">Enter this code on the court schedule to sign in. It works once and expires in one hour.</p>
+
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+          <tr><td align="center" style="border-top:1px solid #E2D9CB;border-bottom:1px solid #E2D9CB;padding:26px 0;">
+            <span style="font:400 44px/1 Georgia,'Times New Roman',serif;letter-spacing:14px;color:#24211D;">{{ .Token }}</span>
+          </td></tr>
+        </table>
+
+        <p style="margin:28px 0 18px 0;font:300 14px/1.6 Helvetica,Arial,sans-serif;color:#5E574E;">Or sign in with one tap:</p>
+        <table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>
+          <td style="background:#24211D;">
+            <a href="{{ .ConfirmationURL }}" style="display:inline-block;padding:15px 26px;font:500 11.5px/1 Helvetica,Arial,sans-serif;letter-spacing:3px;text-transform:uppercase;color:#F6F2EB;text-decoration:none;">Open the court</a>
+          </td>
+        </tr></table>
+      </td></tr>
+
+      <!-- Footer -->
+      <tr><td style="padding:22px 4px 0 4px;font:300 12px/1.6 Helvetica,Arial,sans-serif;color:#958B7E;">
+        Requested for {{ .Email }}. If this wasn't you, ignore this email: no one can sign in without the code.<br>
+        House by Shigeru Ban · 224 NE 59th St, Miami, FL 33137
+      </td></tr>
+
+    </table>
+  </td></tr>
+</table>
+</body>
+</html>
