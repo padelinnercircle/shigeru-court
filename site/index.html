@@ -84,8 +84,13 @@ header.top{border-bottom:1px solid var(--line)}
 .daycol.locked{cursor:default}
 .past{position:absolute;left:0;right:0;top:0;pointer-events:none;
   background:repeating-linear-gradient(45deg,rgba(239,232,221,.85),rgba(239,232,221,.85) 4px,rgba(226,217,203,.6) 4px,rgba(226,217,203,.6) 8px)}
-.nowline{position:absolute;left:-1px;right:0;height:0;border-top:1.5px solid var(--now);z-index:3;pointer-events:none}
-.nowline::before{content:"";position:absolute;left:-4px;top:-4.5px;width:7px;height:7px;border-radius:50%;background:var(--now)}
+.nowline{position:absolute;left:-1px;right:0;height:0;border-top:1px solid var(--ink);z-index:4;pointer-events:none;box-shadow:0 1px 0 rgba(251,249,245,.8)}
+.nowline.today{border-top-width:2px;box-shadow:0 1px 0 rgba(251,249,245,.9),0 -1px 0 rgba(251,249,245,.9)}
+.nowline.today::before{content:"";position:absolute;left:-1px;top:-6px;width:10px;height:10px;border-radius:50%;background:var(--ink);box-shadow:0 0 0 2px var(--card)}
+.nowpill{position:absolute;right:4px;transform:translateY(-50%);background:var(--ink);color:var(--paper);font:500 10px/1 var(--sans);letter-spacing:.04em;padding:4px 6px;z-index:5;white-space:nowrap;pointer-events:none}
+.bk.live{box-shadow:0 0 0 2px var(--ink),0 6px 18px rgba(36,33,29,.18);z-index:3}
+.bk .livetag{display:inline-block;background:var(--ink);color:var(--paper);font:600 9px/1 var(--sans);letter-spacing:.14em;text-transform:uppercase;padding:3px 5px;margin-left:6px;vertical-align:1px}
+.bk.mine .livetag{background:var(--paper);color:var(--ink)}
 .hoverslot{position:absolute;left:4px;right:4px;border:1px dashed var(--timber);background:rgba(165,124,82,.07);display:none;align-items:center;padding:0 10px;
   font:500 10.5px var(--sans);letter-spacing:.16em;text-transform:uppercase;color:var(--timber);pointer-events:none;z-index:2}
 .bk{position:absolute;left:4px;right:4px;background:var(--timber-tint);border-left:3px solid var(--timber);padding:6px 9px;overflow:hidden;z-index:2;
@@ -185,6 +190,8 @@ input[type=checkbox]{accent-color:var(--ink);width:16px;height:16px}
 .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
 
 @media (max-width:520px){
+  .nowpill{right:2px;padding:4px 4px;font-size:9.5px}
+  .nowpill .ampm{display:none}
   .slotguest{grid-template-columns:1fr}
   .brand-name{display:none}
   .nav{gap:2px}
@@ -532,6 +539,14 @@ function render() {
   for (let m = open; m <= close; m += 60) {
     const l = document.createElement("div"); l.className = "tlabel"; l.style.top = ((m - open) / slot) * H + (m === open ? 8 : m === close ? -8 : 0) + "px"; l.textContent = fmtMin(m); tc.appendChild(l);
   }
+  const nowOn = now.min >= open && now.min < close;   // only while the court is open
+  const nowTop = ((now.min - open) / slot) * H;
+  if (nowOn) {
+    const pill = document.createElement("div"); pill.className = "nowpill"; pill.id = "nowPill";
+    pill.style.top = nowTop + "px";
+    const [hm, ap] = fmtMinLong(now.min).split(" "); pill.innerHTML = `${hm}<span class="ampm"> ${ap}</span>`; tc.appendChild(pill);
+    tc.querySelectorAll(".tlabel").forEach((l) => { if (Math.abs(parseFloat(l.style.top) - nowTop) < 12) l.style.visibility = "hidden"; });
+  }
   g.appendChild(tc);
 
   for (const d of state.days) {
@@ -540,17 +555,18 @@ function render() {
     if (d.i === 0) {
       const pastEnd = Math.min(Math.max(now.min, open), close);
       if (pastEnd > open) { const p = document.createElement("div"); p.className = "past"; p.style.height = ((pastEnd - open) / slot) * H + "px"; col.appendChild(p); }
-      if (now.min > open && now.min < close) { const n = document.createElement("div"); n.className = "nowline"; n.style.top = ((now.min - open) / slot) * H + "px"; col.appendChild(n); }
     }
+    if (nowOn) { const n = document.createElement("div"); n.className = "nowline" + (d.i === 0 ? " today" : ""); n.style.top = nowTop + "px"; col.appendChild(n); }
     const ghost = document.createElement("div"); ghost.className = "hoverslot"; ghost.style.height = H * 2 + "px"; ghost.textContent = "+ Book"; col.appendChild(ghost);
     for (const b of state.bookings.filter((x) => x.day === d.key)) {
       const top = ((Math.max(b.startMin, open) - open) / slot) * H, h = ((Math.min(b.endMin, close) - Math.max(b.startMin, open)) / slot) * H;
       const el = document.createElement("button"); el.type = "button";
-      el.className = "bk" + (b.is_mine || b.is_player ? " mine" : "") + (h < H * 2.6 ? " short" : "") + (h < H * 1.6 ? " tiny" : "");
+      const live = d.i === 0 && now.min >= b.startMin && now.min < b.endMin;
+      el.className = "bk" + (b.is_mine || b.is_player ? " mine" : "") + (live ? " live" : "") + (h < H * 2.6 ? " short" : "") + (h < H * 1.6 ? " tiny" : "");
       el.style.top = top + 1 + "px"; el.style.height = h - 2 + "px";
       const name = b.booker_name || (approved() ? "Booked" : "Booked");
       const pl = [...(b.players || []), ...guestNames(b)];
-      el.innerHTML = `<div class="t">${fmtMin(b.startMin)} – ${fmtMin(b.endMin)}</div><div class="n">${esc(name)}${pl.length ? ` <span style="opacity:.7">+${pl.length}</span>` : ""}</div>${pl.length ? `<div class="p">with ${esc(pl.join(", "))}</div>` : ""}${b.note ? `<div class="c">“${esc(b.note)}”</div>` : ""}`;
+      el.innerHTML = `<div class="t">${fmtMin(b.startMin)} – ${fmtMin(b.endMin)}${live ? `<span class="livetag">Now</span>` : ""}</div><div class="n">${esc(name)}${pl.length ? ` <span style="opacity:.7">+${pl.length}</span>` : ""}</div>${pl.length ? `<div class="p">with ${esc(pl.join(", "))}</div>` : ""}${b.note ? `<div class="c">“${esc(b.note)}”</div>` : ""}`;
       el.title = `${pl.length ? partyText(b) : name} · ${fmtMinLong(b.startMin)} – ${fmtMinLong(b.endMin)}${b.note ? "\n" + b.note : ""}`;
       el.addEventListener("click", (ev) => { ev.stopPropagation(); openDetail(b); });
       col.appendChild(el);
@@ -908,6 +924,8 @@ if (!DEMO && sb) {
 }
 await loadSettings(); await loadAccess(); await loadMembers(); await refresh();
 setInterval(refresh, 60000);
+let lastMinute = nowLocal().min;
+setInterval(() => { const m = nowLocal().min; if (m !== lastMinute) { lastMinute = m; render(); } }, 15000);
 document.addEventListener("visibilitychange", () => { if (!document.hidden) refresh(); });
 </script>
 </body>
