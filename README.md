@@ -13,5 +13,7 @@ Booking site for the court at House by Shigeru Ban, 224 NE 59th St, Miami.
 | `email-templates/sign-in-code.html` | Sign-in email template, pasted into Supabase Auth | No |
 | `SETUP.md` | Step-by-step setup guide | No |
 
+**Daily keep-alive:** `.github/workflows/keep-alive.yml` queries the database every morning so the free Supabase project never pauses, and keeps itself enabled. Run it by hand from the **Actions** tab → **Keep database awake** → **Run workflow**.
+
 Only `site/` is published (see `netlify.toml`). Never commit passwords or API keys:
 the Gmail app password lives only in Supabase.

@@ -1,0 +1,59 @@
+# Keeps the free Supabase project from pausing after 7 days without activity,
+# and keeps this scheduled workflow itself from being disabled by GitHub
+# (GitHub turns off schedules in public repos after 60 days with no activity).
+name: Keep database awake
+
+on:
+  schedule:
+    - cron: "17 13 * * *"   # every day at 13:17 UTC (9:17 AM Miami time in summer, 8:17 AM in winter)
+  workflow_dispatch: {}      # lets you run it by hand: Actions tab -> Keep database awake -> Run workflow
+
+permissions:
+  contents: write            # only needed for the rare "stay enabled" commit below
+
+env:
+  SUPABASE_URL: https://uaaderuakjvtqhbztoig.supabase.co
+  # Public "publishable" key, the same one the website uses. Not a secret:
+  # access is enforced by the database rules.
+  SUPABASE_KEY: sb_publishable_Rf4FIGbOZd1DonxuOudIZw_w6LKyXWj
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Read the court settings and the next 7 days (real database queries)
+        run: |
+          set -euo pipefail
+          now=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          week=$(date -u -d '+7 days' +%Y-%m-%dT%H:%M:%SZ)
+          code=$(curl -sS -o settings.json -w '%{http_code}' \
+            "$SUPABASE_URL/rest/v1/settings?select=court_name&id=eq.1" \
+            -H "apikey: $SUPABASE_KEY")
+          echo "settings -> HTTP $code"; [ "$code" = "200" ]
+          code=$(curl -sS -o schedule.json -w '%{http_code}' -X POST \
+            "$SUPABASE_URL/rest/v1/rpc/get_schedule" \
+            -H "apikey: $SUPABASE_KEY" -H "Content-Type: application/json" \
+            -d "{\"p_from\":\"$now\",\"p_to\":\"$week\"}")
+          echo "schedule -> HTTP $code"; [ "$code" = "200" ]
+          echo "Upcoming bookings: $(grep -o '"id"' schedule.json | wc -l)"
+
+  stay-enabled:
+    # If the repo has had no commits for 50+ days, add an empty commit so GitHub
+    # doesn't switch this schedule off at 60 days. "[skip ci]" stops Netlify from
+    # redeploying for it.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+      - name: Refresh repository activity if needed
+        run: |
+          last=$(git log -1 --format=%ct)
+          age_days=$(( ( $(date +%s) - last ) / 86400 ))
+          echo "Last commit was $age_days day(s) ago"
+          if [ "$age_days" -ge 50 ]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git commit --allow-empty -m "Keep scheduled job enabled [skip ci]"
+            git push
+          fi
