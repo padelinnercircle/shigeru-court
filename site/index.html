@@ -98,7 +98,21 @@ header.top{border-bottom:1px solid var(--line)}
 .bk.mine .t{color:var(--timber-2)}
 .bk.mine .n{color:#F4EFE6}
 .bk.mine .c{color:#CFC7B9}
+.bk .p{font:400 12px/1.3 var(--sans);color:var(--ink-2);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bk.mine .p{color:#CFC7B9}
 .bk.short .c{display:none}
+.bk.tiny .p{display:none}
+.pchips{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 16px}
+.pchip{border:1px solid var(--line);background:#fff;padding:8px 12px;font-size:13px;cursor:pointer;line-height:1.2}
+.pchip.on{background:var(--ink);color:var(--paper);border-color:var(--ink)}
+.pchip:disabled{opacity:.4;cursor:not-allowed}
+.pchip.guest{border-style:dashed}
+.pchip.guest.on{background:var(--timber);border-color:var(--timber);border-style:solid}
+.guestrow{display:grid;grid-template-columns:1fr auto;gap:8px;margin:-6px 0 6px}
+.guestrow .input{height:40px;font-size:14px}
+.ghint{font-size:12px;color:var(--muted);margin:0 0 16px}
+.party{font:400 17px/1.45 var(--serif);margin:10px 0 4px}
+.party small{display:block;font:500 10px var(--sans);letter-spacing:.2em;text-transform:uppercase;color:var(--muted);margin-bottom:4px}
 .bk.tiny{padding:3px 9px;display:flex;align-items:center;gap:8px}
 .bk.tiny .n{margin:0;font-size:15px}
 .bk.tiny .t{flex:none}
@@ -240,8 +254,14 @@ input[type=checkbox]{accent-color:var(--ink);width:16px;height:16px}
       <label class="field"><span>Start</span><select class="input" id="bookStart"></select></label>
       <label class="field"><span>End</span><select class="input" id="bookEnd"></select></label>
     </div>
+    <div id="playersWrap" hidden>
+      <span class="field" style="margin-bottom:8px"><span>Playing with <em class="counter" id="playersCount">optional · up to 3</em></span></span>
+      <div class="pchips" id="bookPlayers"></div>
+      <div class="guestrow"><input class="input" id="bookGuest" placeholder="Not on the site? Name or email" maxlength="254"><button type="button" class="btn small" id="bookGuestAdd">Add</button></div>
+      <p class="ghint">Add an email to notify them of the booking. A name alone just shows on the booking.</p>
+    </div>
     <label class="field"><span>Comment <em class="counter" id="noteCount">0 / 200</em></span>
-      <textarea class="input" id="bookNote" maxlength="200" placeholder="Who's playing, open spots, coaching session…"></textarea></label>
+      <textarea class="input" id="bookNote" maxlength="200" placeholder="Open spots, coaching session, guests…"></textarea></label>
     <div class="summary" id="bookSummary"></div>
     <p class="err" id="bookErr"></p>
     <div class="actions"><button class="btn" data-close>Cancel</button><button class="btn solid" id="bookSubmit">Confirm booking</button></div>
@@ -253,8 +273,16 @@ input[type=checkbox]{accent-color:var(--ink);width:16px;height:16px}
   <div class="mhead"><div><div class="eyebrow">Booking</div><h2 id="detailName"></h2></div><button class="x" data-close aria-label="Close">×</button></div>
   <div class="mbody">
     <div class="detail-when" id="detailWhen"></div>
+    <div class="party" id="detailParty" hidden></div>
     <div class="detail-note" id="detailNote"></div>
     <p class="meta" id="detailMeta"></p>
+    <div id="detailEdit" hidden>
+      <span class="field" style="margin-bottom:8px"><span>Who's playing <em class="counter" id="editCount">up to 3</em></span></span>
+      <div class="pchips" id="detailPlayers"></div>
+      <div class="guestrow"><input class="input" id="detailGuest" placeholder="Not on the site? Name or email" maxlength="254"><button type="button" class="btn small" id="detailGuestAdd">Add</button></div>
+      <p class="ghint">Add an email to notify them. A name alone just shows on the booking.</p>
+      <div class="actions" style="justify-content:flex-start;margin-bottom:14px"><button class="btn small" id="detailSavePlayers">Save players</button></div>
+    </div>
     <p class="err" id="detailErr"></p>
     <div class="actions"><button class="btn" data-close>Close</button><button class="btn danger" id="detailCancel" hidden>Cancel booking</button></div>
   </div>
@@ -391,15 +419,60 @@ async function loadBookings() {
 }
 async function loadBookingsInner() {
   const from = zonedToDate(state.days[0].key, 0), to = zonedToDate(state.days[6].key, 24 * 60);
-  const { data, error } = await sb.rpc("get_schedule", { p_from: from.toISOString(), p_to: to.toISOString() });
+  const args = { p_from: from.toISOString(), p_to: to.toISOString() };
+  let { data, error } = await sb.rpc("get_schedule_v3", args);
+  if (error) ({ data, error } = await sb.rpc("get_schedule_v2", args));
+  if (error) ({ data, error } = await sb.rpc("get_schedule", { p_from: from.toISOString(), p_to: to.toISOString() }));
   if (error) { state.loadError = error.message || "unknown error"; return; }
   state.loadError = null;
   state.bookings = (data || []).map(mapBooking);
 }
 function mapBooking(b) {
   const s = new Date(b.starts_at), e = new Date(b.ends_at), ls = localOf(s), le = localOf(e);
-  return { ...b, day: ls.day, startMin: ls.min, endMin: le.day === ls.day ? le.min : 24 * 60 };
+  return { players: [], player_emails: [], guests: [], is_player: false, ...b, day: ls.day, startMin: ls.min, endMin: le.day === ls.day ? le.min : 24 * 60 };
 }
+async function loadMembers() {
+  state.members = [];
+  if (DEMO) { state.members = [{ email: "admin@example.com", full_name: "Demo Admin" }, { email: "alex@example.com", full_name: "Alex Rivera" }, { email: "sam@example.com", full_name: "Sam Ortiz" }, { email: "jo@example.com", full_name: "Jo Park" }]; return; }
+  if (!sb || !state.session || !approved()) return;
+  const { data } = await sb.rpc("list_members");
+  state.members = data || [];
+}
+function otherMembers() { const me = state.access?.email; return (state.members || []).filter((m) => m.email !== me); }
+function renderChips(boxId, selected, countId, onChange) {
+  const box = $(boxId), list = otherMembers(); box.innerHTML = "";
+  for (const m of list) {
+    const b = document.createElement("button"); b.type = "button"; b.className = "pchip" + (selected.has(m.email) ? " on" : "");
+    b.textContent = m.full_name || m.email; b.title = m.email;
+    b.disabled = !selected.has(m.email) && selected.size >= 3;
+    b.onclick = () => { if (selected.has(m.email)) selected.delete(m.email); else if (selected.size < 3) selected.add(m.email); renderChips(boxId, selected, countId, onChange); onChange && onChange(); };
+    box.appendChild(b);
+  }
+  const memberEmails = new Set(list.map((m) => m.email));
+  for (const g of selected) {
+    if (memberEmails.has(g)) continue;
+    const b = document.createElement("button"); b.type = "button"; b.className = "pchip guest on";
+    b.textContent = (g.includes("@") ? "✉ " : "") + g + "  ×"; b.title = g.includes("@") ? "Guest — will be emailed. Click to remove." : "Guest (no email). Click to remove.";
+    b.onclick = () => { selected.delete(g); renderChips(boxId, selected, countId, onChange); onChange && onChange(); };
+    box.appendChild(b);
+  }
+  if (countId) $(countId).textContent = selected.size ? `${selected.size} of 3 selected` : "optional · up to 3";
+}
+function addGuest(inputId, selected, boxId, countId) {
+  const inp = $(inputId), raw = inp.value.trim().replace(/\s+/g, " ");
+  if (!raw) return;
+  if (selected.size >= 3) { toast("A booking can include up to 3 other players."); return; }
+  let v = raw;
+  if (raw.includes("@")) {
+    v = raw.toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)) { toast("That email doesn't look right."); return; }
+    if (v === state.access?.email) { toast("You're already in this booking."); return; }
+  } else if (raw.length > 60) { toast("Keep names under 60 characters."); return; }
+  selected.add(v); inp.value = "";
+  renderChips(boxId, selected, countId);
+}
+const guestLabel = (g) => (g.includes("@") ? g.split("@")[0] : g);
+const partyText = (b) => [b.booker_name || "Booked", ...(b.players || []), ...(b.guests || []).map((g) => (g.includes("@") ? g + " (guest)" : g))].join(", ");
 async function loadAccess() {
   state.access = null;
   if (DEMO) { state.access = { email: "admin@example.com", full_name: "Demo Admin", can_book: true, is_admin: true, notify_on_booking: true }; return; }
@@ -447,11 +520,12 @@ function render() {
     for (const b of state.bookings.filter((x) => x.day === d.key)) {
       const top = ((Math.max(b.startMin, open) - open) / slot) * H, h = ((Math.min(b.endMin, close) - Math.max(b.startMin, open)) / slot) * H;
       const el = document.createElement("button"); el.type = "button";
-      el.className = "bk" + (b.is_mine ? " mine" : "") + (h < H * 2.6 ? " short" : "") + (h < H * 1.6 ? " tiny" : "");
+      el.className = "bk" + (b.is_mine || b.is_player ? " mine" : "") + (h < H * 2.6 ? " short" : "") + (h < H * 1.6 ? " tiny" : "");
       el.style.top = top + 1 + "px"; el.style.height = h - 2 + "px";
       const name = b.booker_name || (approved() ? "Booked" : "Booked");
-      el.innerHTML = `<div class="t">${fmtMin(b.startMin)} – ${fmtMin(b.endMin)}</div><div class="n">${esc(name)}</div>${b.note ? `<div class="c">“${esc(b.note)}”</div>` : ""}`;
-      el.title = `${name} · ${fmtMinLong(b.startMin)} – ${fmtMinLong(b.endMin)}${b.note ? "\n" + b.note : ""}`;
+      const pl = [...(b.players || []), ...(b.guests || []).map(guestLabel)];
+      el.innerHTML = `<div class="t">${fmtMin(b.startMin)} – ${fmtMin(b.endMin)}</div><div class="n">${esc(name)}${pl.length ? ` <span style="opacity:.7">+${pl.length}</span>` : ""}</div>${pl.length ? `<div class="p">with ${esc(pl.join(", "))}</div>` : ""}${b.note ? `<div class="c">“${esc(b.note)}”</div>` : ""}`;
+      el.title = `${pl.length ? partyText(b) : name} · ${fmtMinLong(b.startMin)} – ${fmtMinLong(b.endMin)}${b.note ? "\n" + b.note : ""}`;
       el.addEventListener("click", (ev) => { ev.stopPropagation(); openDetail(b); });
       col.appendChild(el);
     }
@@ -540,6 +614,9 @@ function openBook(dayKey, startMin) {
   const s = state.settings;
   state.selected = { day: dayKey || firstBookableDay(), start: startMin ?? null };
   $("bookNote").value = ""; $("noteCount").textContent = "0 / 200"; $("bookErr").textContent = "";
+  state.bookPlayers = new Set();
+  $("playersWrap").hidden = false; $("bookGuest").value = "";
+  renderChips("bookPlayers", state.bookPlayers, "playersCount");
   renderBookDays(); fillStarts(); openModal("bookScrim");
 }
 function firstBookableDay() {
@@ -590,16 +667,24 @@ $("bookEnd").onchange = updateSummary;
 $("bookNote").oninput = (e) => { $("noteCount").textContent = `${e.target.value.length} / 200`; };
 $("bookBtn").onclick = () => openBook();
 $("bookSubmit").onclick = async () => {
+  if ($("bookGuest").value.trim()) addGuest("bookGuest", state.bookPlayers, "bookPlayers", "playersCount");
   const btn = $("bookSubmit"), err = $("bookErr"); err.textContent = "";
   const { day, start } = state.selected, len = +$("bookEnd").value, note = $("bookNote").value.trim() || null;
   const starts_at = zonedToDate(day, start), ends_at = zonedToDate(day, start + len);
   btn.disabled = true; btn.textContent = "Booking…";
   try {
     if (DEMO) {
-      state.bookings.push(mapBooking({ id: crypto.randomUUID(), starts_at: starts_at.toISOString(), ends_at: ends_at.toISOString(), booker_name: "Demo Admin", note, is_mine: true }));
+      const pe = [...(state.bookPlayers || [])];
+      const mem = pe.filter((e) => state.members.some((m) => m.email === e)), gst = pe.filter((e) => !mem.includes(e));
+      state.bookings.push(mapBooking({ id: crypto.randomUUID(), starts_at: starts_at.toISOString(), ends_at: ends_at.toISOString(), booker_name: "Demo Admin", note, is_mine: true, player_emails: mem, players: mem.map((e) => state.members.find((m) => m.email === e).full_name), guests: gst }));
     } else {
       const { data, error } = await sb.from("bookings").insert({ starts_at: starts_at.toISOString(), ends_at: ends_at.toISOString(), note }).select("id").single();
       if (error) throw error;
+      const pe = [...(state.bookPlayers || [])];
+      if (pe.length) {
+        const { error: pErr } = await sb.rpc("set_booking_players", { p_booking: data.id, p_emails: pe });
+        if (pErr) toast("Booked, but players couldn't be added: " + pErr.message);
+      }
       sb.functions.invoke("notify-booking", { body: { booking_id: data.id, event: "created" } }).catch(() => {});
       await loadBookings();
     }
@@ -620,12 +705,38 @@ function openDetail(b) {
   if (!approved() && !DEMO) { noteEl.hidden = false; noteEl.textContent = "Sign in with an approved email to see who booked and their comment."; }
   else if (b.note) { noteEl.hidden = false; noteEl.textContent = `“${b.note}”`; }
   else noteEl.hidden = true;
-  $("detailMeta").textContent = b.is_mine ? "This is your booking." : "";
+  const party = $("detailParty");
+  if ((b.players || []).length) { party.hidden = false; party.innerHTML = `<small>Booking party</small>${esc(partyText(b))}`; }
+  else party.hidden = true;
+  $("detailMeta").textContent = b.is_mine ? "This is your booking." : b.is_player ? "You're playing in this booking." : "";
   $("detailErr").textContent = "";
   const future = zonedToDate(b.day, b.endMin) > new Date();
+  const canEdit = future && (b.is_mine || isAdmin());
+  $("detailEdit").hidden = !canEdit;
+  if (canEdit) { state.editPlayers = new Set([...(b.player_emails || []), ...(b.guests || [])]); $("detailGuest").value = ""; renderChips("detailPlayers", state.editPlayers, "editCount"); }
   $("detailCancel").hidden = !(future && (b.is_mine || isAdmin()));
   openModal("detailScrim");
 }
+$("bookGuestAdd").onclick = () => addGuest("bookGuest", state.bookPlayers, "bookPlayers", "playersCount");
+$("bookGuest").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); $("bookGuestAdd").click(); } });
+$("detailGuestAdd").onclick = () => addGuest("detailGuest", state.editPlayers, "detailPlayers", "editCount");
+$("detailGuest").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); $("detailGuestAdd").click(); } });
+$("detailSavePlayers").onclick = async () => {
+  const b = state.detail; if (!b) return;
+  if ($("detailGuest").value.trim()) addGuest("detailGuest", state.editPlayers, "detailPlayers", "editCount");
+  const btn = $("detailSavePlayers"), pe = [...(state.editPlayers || [])]; btn.disabled = true; $("detailErr").textContent = "";
+  try {
+    if (DEMO) { const mem = pe.filter((e) => state.members.some((m) => m.email === e)); b.player_emails = mem; b.players = mem.map((e) => state.members.find((m) => m.email === e).full_name); b.guests = pe.filter((e) => !mem.includes(e)); }
+    else {
+      const before = new Set([...(b.player_emails || []), ...(b.guests || [])]), added = pe.filter((e) => e.includes("@") && !before.has(e));
+      const { error } = await sb.rpc("set_booking_players", { p_booking: b.id, p_emails: pe }); if (error) throw error;
+      if (added.length) sb.functions.invoke("notify-booking", { body: { booking_id: b.id, event: "added", emails: added } }).catch(() => {});
+      await loadBookings();
+    }
+    closeModal("detailScrim"); render(); toast(pe.length ? "Players updated. Anyone new with an email has been notified." : "Players removed.");
+  } catch (e) { $("detailErr").textContent = e.message || "Couldn't update players."; }
+  finally { btn.disabled = false; }
+};
 $("detailCancel").onclick = async () => {
   const b = state.detail; if (!b) return;
   if (!confirm(`Cancel ${b.is_mine ? "your" : (b.booker_name || "this") + "'s"} booking on ${b.day} at ${fmtMinLong(b.startMin)}?`)) return;
@@ -749,15 +860,15 @@ $("rulesSave").onclick = async () => {
 
 /* ---------- Demo data (preview only: add ?demo to the URL) ---------- */
 function demoBookings() {
-  const k = (i) => state.days[i].key, mk = (i, s, e, name, note, mine) => mapBooking({ id: `${i}-${s}`, starts_at: zonedToDate(k(i), s).toISOString(), ends_at: zonedToDate(k(i), e).toISOString(), booker_name: name, note, is_mine: !!mine });
+  const k = (i) => state.days[i].key, mk = (i, s, e, name, note, mine, players) => mapBooking({ id: `${i}-${s}`, starts_at: zonedToDate(k(i), s).toISOString(), ends_at: zonedToDate(k(i), e).toISOString(), booker_name: name, note, is_mine: !!mine, players: players || [], player_emails: (players || []).map((p) => p.split(" ")[0].toLowerCase() + "@example.com") });
   state.bookings = [
     mk(0, 8 * 60, 9 * 60 + 30, "Daniela Ruiz", "Morning doubles — one spot open"),
-    mk(0, 18 * 60, 19 * 60 + 30, "Demo Admin", "Coaching session", true),
+    mk(0, 18 * 60, 19 * 60 + 30, "Demo Admin", "Coaching session", true, ["Alex Rivera"]),
     mk(1, 7 * 60, 8 * 60, "Marc Levin", null),
     mk(1, 12 * 60, 13 * 60 + 30, "Ana Ferreira", "Lunch match, beginners welcome"),
     mk(2, 19 * 60, 21 * 60, "Rooftop Social", "Americano social"),
     mk(3, 9 * 60, 10 * 60 + 30, "Paolo Bianchi", "Drills"),
-    mk(4, 17 * 60 + 30, 19 * 60, "Demo Admin", "Doubles, one spot open", true),
+    mk(4, 17 * 60 + 30, 19 * 60, "Demo Admin", "Doubles, one spot open", true, ["Sam Ortiz", "Jo Park"]),
     mk(5, 10 * 60, 12 * 60, "Weekend Clinic", "Open clinic, bring water"),
     mk(5, 16 * 60, 17 * 60, "Lucia Gómez", null),
     mk(6, 8 * 60 + 30, 10 * 60, "Tom Hale", "Looking for a 4th player"),
@@ -767,10 +878,10 @@ function demoBookings() {
 /* ---------- Boot ---------- */
 buildDays();
 if (!DEMO && sb) {
-  sb.auth.onAuthStateChange(async (_evt, session) => { state.session = session; await loadAccess(); await refresh(); });
+  sb.auth.onAuthStateChange(async (_evt, session) => { state.session = session; await loadAccess(); await loadMembers(); await refresh(); });
   const { data } = await sb.auth.getSession(); state.session = data.session;
 }
-await loadSettings(); await loadAccess(); await refresh();
+await loadSettings(); await loadAccess(); await loadMembers(); await refresh();
 setInterval(refresh, 60000);
 document.addEventListener("visibilitychange", () => { if (!document.hidden) refresh(); });
 </script>

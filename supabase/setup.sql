@@ -205,6 +205,91 @@ $$;
 revoke execute on function public.set_my_notifications(boolean) from public, anon;
 grant execute on function public.set_my_notifications(boolean) to authenticated;
 
+-- ---------------------------------------------------------------------------
+-- Booking party: other members (players) and people not on the site (guests).
+-- Guests are an email (notified) or just a name (shown only). Max 3 per booking.
+alter table public.bookings add column if not exists players text[] not null default '{}';
+alter table public.bookings add column if not exists guests text[] not null default '{}';
+
+create or replace function public.reset_booking_players()
+returns trigger language plpgsql security definer set search_path = '' as $$
+begin
+  new.players := '{}';
+  new.guests := '{}';
+  return new;
+end;
+$$;
+revoke execute on function public.reset_booking_players() from public, anon, authenticated;
+create trigger bookings_reset_players before insert on public.bookings
+for each row execute function public.reset_booking_players();
+
+create or replace function public.list_members()
+returns table (email text, full_name text)
+language sql stable security definer set search_path = '' as $$
+  select a.email, coalesce(nullif(btrim(a.full_name), ''), split_part(a.email, '@', 1))
+  from public.approved_emails a
+  where a.can_book
+    and exists (select 1 from public.approved_emails me where me.email = public.current_email())
+  order by 2;
+$$;
+revoke execute on function public.list_members() from public, anon;
+grant execute on function public.list_members() to authenticated;
+
+create or replace function public.set_booking_players(p_booking uuid, p_emails text[])
+returns integer language plpgsql security definer set search_path = '' as $$
+declare b public.bookings; clean text[]; mem text[]; gst text[]; bad text;
+begin
+  select * into b from public.bookings where id = p_booking;
+  if b.id is null or b.status <> 'confirmed' then raise exception 'Booking not found.'; end if;
+  if b.user_id is distinct from auth.uid() and not public.is_admin() then
+    raise exception 'Only the person who booked can change who is playing.';
+  end if;
+  if b.ends_at <= now() then raise exception 'Past bookings cannot be changed.'; end if;
+  select coalesce(array_agg(x order by x), '{}') into clean from (
+    select distinct case when position('@' in e) > 0 then lower(btrim(e)) else regexp_replace(btrim(e), '\s+', ' ', 'g') end as x
+    from unnest(coalesce(p_emails, '{}')) e
+    where btrim(e) <> '' and lower(btrim(e)) <> b.email) s;
+  if coalesce(array_length(clean, 1), 0) > 3 then raise exception 'A booking can include up to 3 other players.'; end if;
+  select e into bad from unnest(clean) e
+  where (position('@' in e) > 0 and (e !~ '^[^@\s]+@[^@\s]+\.[^@\s]+$' or char_length(e) > 254))
+     or (position('@' in e) = 0 and char_length(e) > 60) limit 1;
+  if bad is not null then raise exception '"%" is not a valid email address or name.', bad; end if;
+  select coalesce(array_agg(e order by e), '{}') into mem from unnest(clean) e
+  where exists (select 1 from public.approved_emails a where a.email = e and a.can_book);
+  select coalesce(array_agg(e order by e), '{}') into gst from unnest(clean) e where not (e = any(mem));
+  update public.bookings set players = mem, guests = gst where id = p_booking;
+  return coalesce(array_length(clean, 1), 0);
+end;
+$$;
+revoke execute on function public.set_booking_players(uuid, text[]) from public, anon;
+grant execute on function public.set_booking_players(uuid, text[]) to authenticated;
+
+create or replace function public.get_schedule_v3(p_from timestamptz, p_to timestamptz)
+returns table (id uuid, starts_at timestamptz, ends_at timestamptz, booker_name text, note text,
+               is_mine boolean, is_player boolean, players text[], player_emails text[], guests text[])
+language sql stable security definer set search_path = '' as $$
+  with me as (
+    select exists (select 1 from public.approved_emails a where a.email = public.current_email()) as approved,
+           public.current_email() as email
+  )
+  select b.id, b.starts_at, b.ends_at,
+         case when me.approved then b.booker_name end,
+         case when me.approved then b.note end,
+         (b.user_id = auth.uid()),
+         (me.email <> '' and me.email = any(b.players)),
+         case when me.approved then coalesce((
+           select array_agg(coalesce(nullif(btrim(a.full_name), ''), split_part(p.e, '@', 1)) order by p.ord)
+           from unnest(b.players) with ordinality as p(e, ord)
+           left join public.approved_emails a on a.email = p.e), '{}') else '{}' end,
+         case when me.approved then b.players else '{}' end,
+         case when me.approved then b.guests else '{}' end
+  from public.bookings b, me
+  where b.status = 'confirmed' and b.ends_at > p_from and b.starts_at < p_to
+    and p_to - p_from <= interval '62 days'
+  order by b.starts_at;
+$$;
+grant execute on function public.get_schedule_v3(timestamptz, timestamptz) to anon, authenticated;
+
 -- First admin: replace with the real admin email before running.
 insert into public.approved_emails (email, full_name, can_book, is_admin, notify_on_booking)
 values ('admin@example.com', 'Court Admin', true, true, true);
