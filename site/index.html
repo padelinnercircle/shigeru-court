@@ -745,6 +745,7 @@ $("bookSubmit").onclick = async () => {
         if (pErr) toast("Booked, but players couldn't be added: " + pErr.message);
       }
       sb.functions.invoke("notify-booking", { body: { booking_id: data.id, event: "created" } }).catch(() => {});
+      syncCalendars();
       await loadBookings();
     }
     closeModal("bookScrim"); render(); toast("Court booked. Notifications are on their way.");
@@ -791,6 +792,7 @@ $("detailSavePlayers").onclick = async () => {
       const added = partyEmails(party.members, party.guests).filter((e) => !before.has(e));
       const { error } = await sb.rpc("set_booking_party", { p_booking: b.id, p_members: party.members, p_guests: party.guests }); if (error) throw error;
       if (added.length) sb.functions.invoke("notify-booking", { body: { booking_id: b.id, event: "added", emails: added } }).catch(() => {});
+      syncCalendars();
       await loadBookings();
     }
     closeModal("detailScrim"); render();
@@ -807,6 +809,7 @@ $("detailCancel").onclick = async () => {
     else {
       const { error } = await sb.rpc("cancel_booking", { p_id: b.id }); if (error) throw error;
       sb.functions.invoke("notify-booking", { body: { booking_id: b.id, event: "cancelled" } }).catch(() => {});
+      syncCalendars();
       await loadBookings();
     }
     closeModal("detailScrim"); render(); toast("Booking cancelled.");
@@ -851,6 +854,9 @@ $("authVerify").onclick = async () => {
   finally { btn.disabled = false; }
 };
 $("authCode").addEventListener("keydown", (e) => { if (e.key === "Enter") $("authVerify").click(); });
+
+/* ---------- Google Calendar sync (server mirrors bookings into linked calendars) ---------- */
+function syncCalendars() { if (!DEMO) sb.functions.invoke("gcal-sync", { body: {} }).catch(() => {}); }
 
 /* ---------- Calendar feed ---------- */
 function calLinks(token) {

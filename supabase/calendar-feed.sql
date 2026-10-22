@@ -38,3 +38,13 @@ begin
 end $$;
 revoke all on function public.reset_my_calendar_token() from public, anon;
 grant execute on function public.reset_my_calendar_token() to authenticated;
+
+-- Direct Google Calendar sync: one row per manager who wants their court
+-- bookings written into an existing Google Calendar (shared with the service account).
+create table if not exists public.calendar_sync (
+  email text primary key references public.approved_emails(email) on delete cascade,
+  calendar_id text not null,
+  created_at timestamptz not null default now()
+);
+alter table public.calendar_sync enable row level security;  -- server only
+revoke all on public.calendar_sync from anon, authenticated;
