@@ -19,12 +19,12 @@ const enc = (o: unknown) => b64url(new TextEncoder().encode(JSON.stringify(o)));
 // Google event ids allow only a-v and 0-9; a UUID without dashes fits.
 const eventId = (bookingId: string) => "court" + bookingId.replace(/-/g, "").toLowerCase();
 
-async function googleToken(sa: { client_email: string; private_key: string }) {
+async function googleToken(sa: { client_email: string; private_key: string }, sub?: string) {
   const pem = sa.private_key.replace(/-----[^-]+-----/g, "").replace(/\s+/g, "");
   const der = Uint8Array.from(atob(pem), (c) => c.charCodeAt(0));
   const key = await crypto.subtle.importKey("pkcs8", der, { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" }, false, ["sign"]);
   const now = Math.floor(Date.now() / 1000);
-  const unsigned = `${enc({ alg: "RS256", typ: "JWT" })}.${enc({ iss: sa.client_email, scope: "https://www.googleapis.com/auth/calendar.events", aud: "https://oauth2.googleapis.com/token", iat: now, exp: now + 3600 })}`;
+  const unsigned = `${enc({ alg: "RS256", typ: "JWT" })}.${enc({ iss: sa.client_email, scope: "https://www.googleapis.com/auth/calendar.events", aud: "https://oauth2.googleapis.com/token", iat: now, exp: now + 3600, ...(sub ? { sub } : {}) })}`;
   const sig = await crypto.subtle.sign("RSASSA-PKCS1-v1_5", key, new TextEncoder().encode(unsigned));
   const r = await fetch("https://oauth2.googleapis.com/token", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer", assertion: `${unsigned}.${b64url(sig)}` }) });
   const j = await r.json();
@@ -48,7 +48,7 @@ Deno.serve(async (req) => {
 
   const raw = Deno.env.get("GOOGLE_SERVICE_ACCOUNT");
   if (!raw) return json({ skipped: "no_google_credentials" });
-  const { data: targets } = await db.from("calendar_sync").select("email, calendar_id");
+  const { data: targets } = await db.from("calendar_sync").select("email, calendar_id, act_as");
   if (!targets?.length) return json({ skipped: "no_calendars" });
 
   const since = new Date(Date.now() - 864e5).toISOString();
@@ -60,14 +60,19 @@ Deno.serve(async (req) => {
   const nm = (e: string) => names.get(e) ?? e.split("@")[0];
   const site = Deno.env.get("SITE_URL") ?? "";
 
-  const token = await googleToken(JSON.parse(raw));
-  const H = { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
+  const sa = JSON.parse(raw);
+  const tokens = new Map<string, string>();
   const report: Record<string, unknown> = {};
 
   for (const t of targets) {
     const me = t.email.toLowerCase(); const cal = encodeURIComponent(t.calendar_id);
     const r = { added: 0, updated: 0, removed: 0, unchanged: 0, errors: [] as string[] };
     try {
+      // act_as set: domain-wide delegation, the robot acts as that Workspace user.
+      // act_as empty: the calendar is shared with the robot directly.
+      const who = t.act_as ?? "";
+      if (!tokens.has(who)) tokens.set(who, await googleToken(sa, who || undefined));
+      const H = { Authorization: `Bearer ${tokens.get(who)}`, "Content-Type": "application/json" };
       const want = new Map<string, Record<string, unknown>>();
       for (const b of bookings) {
         if (b.email !== me && !(b.players ?? []).includes(me)) continue;

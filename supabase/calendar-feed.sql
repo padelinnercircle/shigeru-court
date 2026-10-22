@@ -44,7 +44,9 @@ grant execute on function public.reset_my_calendar_token() to authenticated;
 create table if not exists public.calendar_sync (
   email text primary key references public.approved_emails(email) on delete cascade,
   calendar_id text not null,
+  act_as text,  -- Workspace user the robot acts as (domain-wide delegation); null = calendar shared with the robot
   created_at timestamptz not null default now()
 );
 alter table public.calendar_sync enable row level security;  -- server only
 revoke all on public.calendar_sync from anon, authenticated;
+alter table public.calendar_sync add column if not exists act_as text;
