@@ -3,8 +3,8 @@
 // that has been shared with the service account ("Make changes to events").
 // The service account can touch only calendars shared with it.
 // Every run reconciles all upcoming bookings, so it is idempotent and self-healing:
-// bookings you make or are a player in are added/updated; cancelled or
-// no-longer-yours bookings are removed. Past events are never touched.
+// bookings you make (and, if include_added, games you were added to) are
+// added/updated; cancelled or no-longer-yours bookings are removed. Past events are never touched.
 // Secret: GOOGLE_SERVICE_ACCOUNT = the service account's JSON key (whole file).
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
@@ -48,7 +48,7 @@ Deno.serve(async (req) => {
 
   const raw = Deno.env.get("GOOGLE_SERVICE_ACCOUNT");
   if (!raw) return json({ skipped: "no_google_credentials" });
-  const { data: targets } = await db.from("calendar_sync").select("email, calendar_id, act_as");
+  const { data: targets } = await db.from("calendar_sync").select("email, calendar_id, act_as, include_added");
   if (!targets?.length) return json({ skipped: "no_calendars" });
 
   const since = new Date(Date.now() - 864e5).toISOString();
@@ -75,7 +75,8 @@ Deno.serve(async (req) => {
       const H = { Authorization: `Bearer ${tokens.get(who)}`, "Content-Type": "application/json" };
       const want = new Map<string, Record<string, unknown>>();
       for (const b of bookings) {
-        if (b.email !== me && !(b.players ?? []).includes(me)) continue;
+        // Only bookings this person made; also games others added them to if include_added is on.
+        if (b.email !== me && !(t.include_added && (b.players ?? []).includes(me))) continue;
         const others = [b.email, ...(b.players ?? [])].filter((e) => e !== me).map(nm);
         const guests = (b.guest_entries ?? []).filter((g) => g?.name).map((g) => `${g.name} (guest)`);
         const withWho = [...others, ...guests];

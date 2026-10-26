@@ -50,3 +50,5 @@ create table if not exists public.calendar_sync (
 alter table public.calendar_sync enable row level security;  -- server only
 revoke all on public.calendar_sync from anon, authenticated;
 alter table public.calendar_sync add column if not exists act_as text;
+-- Off by default: only bookings the person made themselves go into their calendar.
+alter table public.calendar_sync add column if not exists include_added boolean not null default false;
