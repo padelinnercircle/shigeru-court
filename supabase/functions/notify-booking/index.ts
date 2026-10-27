@@ -16,7 +16,7 @@ const icsText = (s: string) => String(s ?? "").replace(/\\/g, "\\\\").replace(/;
 const fold = (line: string) => { const out: string[] = []; let cur = ""; for (const ch of line) { if (new TextEncoder().encode(cur + ch).length > 74) { out.push(cur); cur = " " + ch; } else cur += ch; } out.push(cur); return out.join("\r\n"); };
 const EVENT_TITLE = "Padel Court - House";
 const EVENT_LOCATION = "House by Shigeru Ban, 224 NE 59th St, Miami, FL 33137";
-function buildIcs(o: { uid: string; start: string; end: string; description: string; cancelled: boolean }) {
+function buildIcs(o: { uid: string; start: string; end: string; description: string; cancelled: boolean; sequence?: number }) {
   const lines = [
     "BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//House by Shigeru Ban//Padel Court//EN", "CALSCALE:GREGORIAN", "METHOD:PUBLISH",
     "BEGIN:VEVENT",
@@ -24,7 +24,7 @@ function buildIcs(o: { uid: string; start: string; end: string; description: str
     `SUMMARY:${icsText((o.cancelled ? "CANCELLED: " : "") + EVENT_TITLE)}`,
     `LOCATION:${icsText(EVENT_LOCATION)}`,
     `DESCRIPTION:${icsText(o.description)}`,
-    `STATUS:${o.cancelled ? "CANCELLED" : "CONFIRMED"}`, `SEQUENCE:${o.cancelled ? 1 : 0}`,
+    `STATUS:${o.cancelled ? "CANCELLED" : "CONFIRMED"}`, `SEQUENCE:${(o.sequence ?? 0) + (o.cancelled ? 1 : 0)}`,
     ...(o.cancelled ? [] : ["BEGIN:VALARM", "TRIGGER:-PT60M", "ACTION:DISPLAY", `DESCRIPTION:${icsText(EVENT_TITLE)}`, "END:VALARM"]),
     "END:VEVENT", "END:VCALENDAR",
   ];
@@ -63,7 +63,7 @@ Deno.serve(async (req) => {
 
   let body: { booking_id?: string; event?: string; emails?: string[] };
   try { body = await req.json(); } catch { return json({ error: "bad_json" }, 400); }
-  const event = body.event === "cancelled" ? "cancelled" : body.event === "added" ? "added" : "created";
+  const event = body.event === "cancelled" ? "cancelled" : body.event === "added" ? "added" : body.event === "modified" ? "modified" : "created";
   if (!body.booking_id) return json({ error: "missing booking_id" }, 400);
 
   const { data: b } = await admin.from("bookings").select("*").eq("id", body.booking_id).maybeSingle();
@@ -74,6 +74,7 @@ Deno.serve(async (req) => {
   if (event === "created" && (b.status !== "confirmed" || b.notified_created_at)) return json({ skipped: "already_notified" });
   if (event === "cancelled" && (b.status !== "cancelled" || b.notified_cancelled_at)) return json({ skipped: "already_notified" });
   if (event === "added" && b.status !== "confirmed") return json({ skipped: "not_confirmed" });
+  if (event === "modified" && (b.status !== "confirmed" || !b.modified_at || b.notified_modified_at)) return json({ skipped: "already_notified" });
 
   const { data: settings } = await admin.from("settings").select("*").eq("id", 1).single();
   const tz = settings?.timezone ?? "America/New_York";
@@ -107,16 +108,20 @@ Deno.serve(async (req) => {
   ];
 
   const isAdded = event === "added";
-  const isNew = event === "created" || isAdded;
-  const subject = isAdded ? `You're playing: ${when}` : isNew ? `Court booked: ${when}` : `Booking cancelled: ${when}`;
+  const isMod = event === "modified";
+  const isNew = event === "created" || isAdded || isMod;
+  const subject = isMod ? `Booking changed: ${when}` : isAdded ? `You're playing: ${when}` : isNew ? `Court booked: ${when}` : `Booking cancelled: ${when}`;
+  const prevDay = b.prev_starts_at ? new Date(b.prev_starts_at).toLocaleDateString("en-US", { timeZone: tz, weekday: "long", month: "long", day: "numeric" }) : "";
+  const prevWhen = b.prev_starts_at ? `${prevDay}, ${t(b.prev_starts_at)} – ${t(b.prev_ends_at)}` : "";
+  const changedBy = b.modified_by ?? "";
   const dayLabel = new Date(b.starts_at).toLocaleDateString("en-US", { timeZone: tz, weekday: "long" });
   const dateLabel = new Date(b.starts_at).toLocaleDateString("en-US", { timeZone: tz, month: "long", day: "numeric" });
   const timeLabel = `${t(b.starts_at)} – ${t(b.ends_at)}`;
   const who = b.booker_name ?? b.email;
-  const text = `${isAdded ? `${b.booker_name ?? b.email} added you to this booking` : isNew ? "Court booked" : "Booking cancelled"}\n${when}\nBooked by ${who} (${b.email})${playerNames.length ? `\nPlaying with: ${playerNames.join(", ")}` : ""}${b.note ? `\nComment: ${b.note}` : ""}${!isNew ? `\nCancelled by ${b.cancelled_by ?? ""}\nThis time is open again.` : ""}${siteUrl ? `\n\nSchedule: ${siteUrl}` : ""}\n\nHouse by Shigeru Ban - 224 NE 59th St, Miami, FL 33137`;
+  const text = `${isMod ? `Booking changed${prevWhen ? `\nWas: ${prevWhen}\nNow:` : ""}` : isAdded ? `${b.booker_name ?? b.email} added you to this booking` : isNew ? "Court booked" : "Booking cancelled"}\n${when}\nBooked by ${who} (${b.email})${playerNames.length ? `\nPlaying with: ${playerNames.join(", ")}` : ""}${b.note ? `\nComment: ${b.note}` : ""}${isMod && changedBy ? `\nChanged by ${changedBy}` : ""}${!isNew ? `\nCancelled by ${b.cancelled_by ?? ""}\nThis time is open again.` : ""}${siteUrl ? `\n\nSchedule: ${siteUrl}` : ""}\n\nHouse by Shigeru Ban - 224 NE 59th St, Miami, FL 33137`;
 
   const calDetails = [`Booked by ${who}`, playerNames.length ? `Playing with: ${playerNames.join(", ")}` : "", b.note ? `Comment: ${b.note}` : "", siteUrl ? `Schedule: ${siteUrl}` : ""].filter(Boolean).join("\n");
-  const ics = buildIcs({ uid: `${b.id}@shigeru-court`, start: b.starts_at, end: b.ends_at, description: calDetails, cancelled: !isNew });
+  const ics = buildIcs({ uid: `${b.id}@shigeru-court`, start: b.starts_at, end: b.ends_at, description: calDetails, cancelled: !isNew, sequence: b.revision ?? 0 });
   const gLink = googleLink(b.starts_at, b.ends_at, calDetails), oLink = outlookLink(b.starts_at, b.ends_at, calDetails);
   const aLink = `${url}/functions/v1/booking-ics?id=${b.id}`;   // opens straight into Apple Calendar
   const textWithCal = isNew ? `${text}\n\nAdd to Google Calendar: ${gLink}\nAdd to Apple Calendar: ${aLink}\nAdd to Outlook: ${oLink}` : text;
@@ -134,15 +139,17 @@ Deno.serve(async (req) => {
     <td style="padding-left:12px;font:500 11px/1.2 ${F};letter-spacing:4px;text-transform:uppercase;color:#24211D;">House by Shigeru Ban</td>
   </tr></table></td></tr>
   <tr><td style="background:#FBF9F5;border:1px solid #E2D9CB;${isNew ? "border-top:3px solid #A57C52;" : "border-top:3px solid #958B7E;"}padding:38px 40px 36px 40px;">
-    <p style="margin:0 0 14px 0;font:500 11px/1.2 ${F};letter-spacing:3.5px;text-transform:uppercase;color:${isNew ? "#A57C52" : "#9B3B2E"};">The Court &middot; ${isAdded ? "You're in" : isNew ? "Reservation" : "Cancellation"}</p>
-    <h1 style="margin:0 0 6px 0;font:400 38px/1.05 ${S};color:#24211D;">${isAdded ? `You're <em style="color:#A57C52;">playing</em>` : isNew ? `Court <em style="color:#A57C52;">booked</em>` : `Booking <em style="color:#958B7E;">cancelled</em>`}</h1>
-    <p style="margin:0 0 24px 0;font:300 15px/1.6 ${F};color:#5E574E;">${isAdded ? `${esc(b.booker_name ?? b.email)} added you to this booking.` : isNew ? "The court is reserved for this time." : "This time is open again for anyone to book."}</p>
+    <p style="margin:0 0 14px 0;font:500 11px/1.2 ${F};letter-spacing:3.5px;text-transform:uppercase;color:${isNew ? "#A57C52" : "#9B3B2E"};">The Court &middot; ${isMod ? "Change" : isAdded ? "You're in" : isNew ? "Reservation" : "Cancellation"}</p>
+    <h1 style="margin:0 0 6px 0;font:400 38px/1.05 ${S};color:#24211D;">${isMod ? `Booking <em style="color:#A57C52;">changed</em>` : isAdded ? `You're <em style="color:#A57C52;">playing</em>` : isNew ? `Court <em style="color:#A57C52;">booked</em>` : `Booking <em style="color:#958B7E;">cancelled</em>`}</h1>
+    <p style="margin:0 0 24px 0;font:300 15px/1.6 ${F};color:#5E574E;">${isMod ? "This reservation has moved to a new time. The old time is open again." : isAdded ? `${esc(b.booker_name ?? b.email)} added you to this booking.` : isNew ? "The court is reserved for this time." : "This time is open again for anyone to book."}</p>
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-top:1px solid #E2D9CB;">
-      ${row("Day", `<span style="font-size:24px;${!isNew ? "text-decoration:line-through;color:#958B7E;" : ""}">${esc(dayLabel)}, ${esc(dateLabel)}</span>`)}
+      ${isMod && prevWhen ? row("Was", `<span style="text-decoration:line-through;color:#958B7E;">${esc(prevWhen)}</span>`) : ""}
+      ${row(isMod ? "Now" : "Day", `<span style="font-size:24px;${!isNew ? "text-decoration:line-through;color:#958B7E;" : ""}">${esc(dayLabel)}, ${esc(dateLabel)}</span>`)}
       ${row("Time", `<span style="${!isNew ? "text-decoration:line-through;color:#958B7E;" : ""}">${esc(timeLabel)}</span>`)}
       ${row("Booked by", `${esc(who)}<br><span style="font:300 13px/1.6 ${F};color:#958B7E;">${esc(b.email)}</span>`)}
       ${playerNames.length ? row("Playing with", esc(playerNames.join(", "))) : ""}
       ${b.note ? row("Comment", `<span style="font-style:italic;color:#5E574E;border-left:2px solid #C9A57E;padding-left:12px;display:inline-block;">&ldquo;${esc(b.note)}&rdquo;</span>`) : ""}
+      ${isMod && changedBy ? row("Changed by", esc(changedBy)) : ""}
       ${!isNew ? row("Cancelled by", esc(b.cancelled_by ?? "")) : ""}
     </table>
     ${isNew ? `<p style="margin:28px 0 10px 0;font:500 10.5px/1.2 ${F};letter-spacing:2.5px;text-transform:uppercase;color:#958B7E;">Add to your calendar</p>
@@ -191,7 +198,8 @@ Deno.serve(async (req) => {
   }
 
   if (sent > 0 && !isAdded) {
-    await admin.from("bookings").update(event === "created" ? { notified_created_at: new Date().toISOString() } : { notified_cancelled_at: new Date().toISOString() }).eq("id", b.id);
+    const stamp = new Date().toISOString();
+    await admin.from("bookings").update(event === "created" ? { notified_created_at: stamp } : isMod ? { notified_modified_at: stamp } : { notified_cancelled_at: stamp }).eq("id", b.id);
   }
   return json({ sent, failed });
 });

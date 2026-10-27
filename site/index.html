@@ -106,6 +106,28 @@ header.top{border-bottom:1px solid var(--line)}
 .bk .p{font:400 12px/1.3 var(--sans);color:var(--ink-2);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .bk.mine .p{color:#CFC7B9}
 .bk.short .c{display:none}
+.bk.can-move{cursor:grab;-webkit-touch-callout:none;-webkit-user-select:none;user-select:none}
+.bk .grip{position:absolute;left:0;right:0;bottom:0;height:9px;cursor:ns-resize;display:none}
+.bk.can-move .grip{display:block}
+.bk.can-move:hover .grip::after{content:"";position:absolute;left:50%;bottom:3px;width:22px;height:2px;margin-left:-11px;background:currentColor;opacity:.35}
+.bk.can-move .grip{color:var(--timber)}
+.bk.mine.can-move .grip{color:#F4EFE6}
+.bk.dragging{z-index:7;cursor:grabbing;transition:none;transform:none;box-shadow:0 14px 30px rgba(36,33,29,.28);opacity:.96}
+.bk.dragging.bad{background:#F4DDD8;border-left-color:var(--danger)}
+.bk.dragging.bad .t,.bk.dragging.bad .n{color:var(--danger)}
+.bk.saving{pointer-events:none}
+.bk.saving::after{content:"Modifying…";position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(251,249,245,.96);
+  font:500 10.5px var(--sans);letter-spacing:.16em;text-transform:uppercase;color:var(--ink)}
+.dropghost{position:absolute;left:4px;right:4px;border:1px dashed var(--muted);background:rgba(36,33,29,.04);z-index:1;pointer-events:none}
+body.is-dragging,body.is-dragging *{cursor:grabbing!important;-webkit-user-select:none;user-select:none}
+.modbar{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:60;background:var(--ink);color:var(--paper);padding:11px 18px;display:flex;align-items:center;gap:10px;
+  font:400 13.5px var(--sans);box-shadow:0 10px 30px rgba(36,33,29,.25);max-width:calc(100vw - 32px)}
+.modbar .spin{width:12px;height:12px;border:2px solid rgba(251,249,245,.35);border-top-color:var(--paper);border-radius:50%;animation:spin .8s linear infinite;flex:none}
+@keyframes spin{to{transform:rotate(360deg)}}
+.movecmp{display:grid;gap:12px;border-top:1px solid var(--line);border-bottom:1px solid var(--line);padding:14px 0;margin:4px 0 14px}
+.movecmp small{display:block;font:500 10.5px var(--sans);letter-spacing:.18em;text-transform:uppercase;color:var(--muted);margin-bottom:3px}
+.movecmp s{font:400 17px var(--serif);color:var(--muted)}
+.movecmp strong{font:400 21px var(--serif);color:var(--ink)}
 .bk.tiny .p{display:none}
 .pchips{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 16px}
 .pchip{border:1px solid var(--line);background:#fff;padding:8px 12px;font-size:13px;cursor:pointer;line-height:1.2}
@@ -302,7 +324,7 @@ a.btn{text-decoration:none;display:inline-flex;align-items:center;justify-conten
       <div class="actions" style="justify-content:flex-start;margin-bottom:14px"><button class="btn small" id="detailSavePlayers">Save players</button></div>
     </div>
     <p class="err" id="detailErr"></p>
-    <div class="actions"><button class="btn" data-close>Close</button><button class="btn danger" id="detailCancel" hidden>Cancel booking</button></div>
+    <div class="actions"><button class="btn" data-close>Close</button><button class="btn" id="detailMove" hidden>Change time</button><button class="btn danger" id="detailCancel" hidden>Cancel booking</button></div>
   </div>
 </div></div>
 
@@ -378,6 +400,16 @@ a.btn{text-decoration:none;display:inline-flex;align-items:center;justify-conten
   </div>
 </div></div>
 
+<div class="modbar" id="modbar" role="status" aria-live="polite" hidden><span class="spin"></span><span id="modbarText">Modifying reservation…</span></div>
+<div class="scrim" id="moveScrim"><div class="modal" role="dialog" aria-modal="true" aria-labelledby="moveTitle">
+  <div class="mhead"><div><div class="eyebrow">Modify reservation</div><h2 id="moveTitle">Change this booking?</h2></div><button class="x" data-close aria-label="Close">×</button></div>
+  <div class="mbody">
+    <div class="movecmp"><div><small>Was</small><s id="moveWas"></s></div><div><small>Now</small><strong id="moveNow"></strong></div></div>
+    <p class="meta" id="moveWho"></p>
+    <p class="err" id="moveErr"></p>
+    <div class="actions"><button class="btn" data-close>Keep original</button><button class="btn solid" id="moveConfirm">Confirm change</button></div>
+  </div>
+</div></div>
 <div class="toast" id="toast"></div>
 
 <script type="module">
@@ -538,6 +570,8 @@ async function refresh() { buildDays(); await loadBookings(); render(); }
 /* ---------- Rendering ---------- */
 const rowH = () => parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--row")) || 26;
 function render() {
+  if (state.drag || state.pendingMove || state.saving) { state.renderLater = true; return; }
+  state.renderLater = false;
   const s = state.settings, open = toMin(s.open_time), close = toMin(s.close_time), slot = s.slot_minutes;
   const rows = (close - open) / slot, H = rowH(), height = rows * H, now = nowLocal();
   $("address").textContent = (s.address || "224 NE 59th St, Miami").split(",")[0] + " · Miami";
@@ -582,12 +616,17 @@ function render() {
       const el = document.createElement("button"); el.type = "button";
       const live = d.i === 0 && now.min >= b.startMin && now.min < b.endMin;
       el.className = "bk" + (b.is_mine || b.is_player ? " mine" : "") + (live ? " live" : "") + (h < H * 2.6 ? " short" : "") + (h < H * 1.6 ? " tiny" : "");
-      el.style.top = top + 1 + "px"; el.style.height = h - 2 + "px";
+      el.style.top = top + 1 + "px"; el.style.height = h - 2 + "px"; el.dataset.id = b.id;
       const name = b.booker_name || (approved() ? "Booked" : "Booked");
       const pl = [...(b.players || []), ...guestNames(b)];
       el.innerHTML = `<div class="t">${fmtMin(b.startMin)} – ${fmtMin(b.endMin)}${live ? `<span class="livetag">Now</span>` : ""}</div><div class="n">${esc(name)}${pl.length ? ` <span style="opacity:.7">+${pl.length}</span>` : ""}</div>${pl.length ? `<div class="p">with ${esc(pl.join(", "))}</div>` : ""}${b.note ? `<div class="c">“${esc(b.note)}”</div>` : ""}`;
       el.title = `${pl.length ? partyText(b) : name} · ${fmtMinLong(b.startMin)} – ${fmtMinLong(b.endMin)}${b.note ? "\n" + b.note : ""}`;
-      el.addEventListener("click", (ev) => { ev.stopPropagation(); openDetail(b); });
+      el.addEventListener("click", (ev) => { ev.stopPropagation(); if (state.suppressClick) { state.suppressClick = false; return; } openDetail(b); });
+      if (canMove(b)) {
+        el.classList.add("can-move");
+        const grip = document.createElement("span"); grip.className = "grip"; grip.setAttribute("aria-hidden", "true"); el.appendChild(grip);
+        el.addEventListener("pointerdown", (ev) => dragStart(ev, el, b));
+      }
       col.appendChild(el);
     }
     col.addEventListener("mousemove", (ev) => hoverGhost(ev, col, d));
@@ -606,8 +645,9 @@ function minuteAt(ev, col) {
 function freeRun(dayKey, start) {
   const s = state.settings, close = toMin(s.close_time), now = nowLocal();
   if (dayKey === state.days[0].key && start <= now.min) return 0;
-  if (state.bookings.some((b) => b.day === dayKey && start >= b.startMin && start < b.endMin)) return 0;
-  const next = state.bookings.filter((b) => b.day === dayKey && b.startMin >= start).reduce((a, b) => Math.min(a, b.startMin), close);
+  const others = state.bookings.filter((b) => b.day === dayKey && b.id !== state.editing?.id);
+  if (others.some((b) => start >= b.startMin && start < b.endMin)) return 0;
+  const next = others.filter((b) => b.startMin >= start).reduce((a, b) => Math.min(a, b.startMin), close);
   return Math.min(next, close) - start;
 }
 function hoverGhost(ev, col, d) {
@@ -650,7 +690,7 @@ function renderChrome() {
   $("calBtn").hidden = !approved();
   const nb = $("notifyBtn"); nb.hidden = !approved() || state.access?.notify_on_booking === undefined;
   if (!nb.hidden) { const on = !!state.access.notify_on_booking; nb.textContent = on ? "Emails: on" : "Emails: off"; nb.setAttribute("aria-pressed", on ? "true" : "false"); nb.style.color = on ? "" : "var(--muted)"; }
-  $("hint").textContent = !signed ? "Sign in to see who's playing and to book" : canBook() ? "Tap any open time to book it" : "Your email isn't approved to book";
+  $("hint").textContent = !signed ? "Sign in to see who's playing and to book" : canBook() ? (matchMedia("(pointer: coarse)").matches ? "Tap an open time to book · press and hold your booking to move it" : "Click an open time to book · drag your booking to move it, or its bottom edge to resize") : "Your email isn't approved to book";
   if (state.loadError) showBanner(`<strong>The schedule couldn't be loaded</strong>, so open times may not be accurate. Refresh the page in a minute. (${esc(state.loadError)})`);
   else if (signed && !DEMO && !approved()) showBanner(`You're signed in as <strong>${esc(state.session?.user?.email)}</strong>, which isn't on the approved list. Ask the building admin to add you.`);
   else if (!signed) showBanner(`Open times are shown to everyone. <button class="linkish" id="bannerSignin">Sign in</button> with your approved email to see who has booked, read their comments, and reserve the court.`);
@@ -665,20 +705,33 @@ function toast(msg) { const t = $("toast"); t.textContent = msg; t.classList.add
 function openModal(id) { $(id).classList.add("open"); }
 function closeModal(id) { $(id).classList.remove("open"); }
 document.querySelectorAll(".scrim").forEach((sc) => {
-  sc.addEventListener("click", (e) => { if (e.target === sc || e.target.closest("[data-close]")) sc.classList.remove("open"); });
+  sc.addEventListener("click", (e) => { if (e.target === sc || e.target.closest("[data-close]")) { sc.classList.remove("open"); onModalClosed(sc.id); } });
 });
-document.addEventListener("keydown", (e) => { if (e.key === "Escape") document.querySelectorAll(".scrim.open").forEach((s) => s.classList.remove("open")); });
+document.addEventListener("keydown", (e) => {
+  if (e.key !== "Escape") return;
+  if (state.drag?.active) { dragAbort(); return; }
+  document.querySelectorAll(".scrim.open").forEach((s) => { s.classList.remove("open"); onModalClosed(s.id); });
+});
+function onModalClosed(id) {
+  if (id === "moveScrim" && state.pendingMove) { state.pendingMove = null; render(); }
+  if (id === "bookScrim" && state.editing) state.editing = null;
+}
 
 /* ---------- Booking ---------- */
-function openBook(dayKey, startMin) {
+function openBook(dayKey, startMin, editing) {
   if (!state.session && !DEMO) { openAuth(); return; }
-  if (!canBook()) { toast("Your email isn't approved to book the court."); return; }
+  if (!editing && !canBook()) { toast("Your email isn't approved to book the court."); return; }
   const s = state.settings;
+  state.editing = editing || null;
+  $("bookTitle").textContent = editing ? "Change booking" : "Book the court";
+  $("bookScrim").querySelector(".eyebrow").textContent = editing ? "Modify reservation" : "Reservation";
+  $("playersWrap").hidden = !!editing; $("bookNote").closest(".field").hidden = !!editing;
+  $("bookSubmit").textContent = editing ? "Save new time" : "Confirm booking";
   state.selected = { day: dayKey || firstBookableDay(), start: startMin ?? null };
   $("bookNote").value = ""; $("noteCount").textContent = "0 / 200"; $("bookErr").textContent = "";
   state.bookPlayers = new Set();
   renderSlots("bookSlots", (state.access?.full_name || "You") + " (you)", []);
-  renderBookDays(); fillStarts(); openModal("bookScrim");
+  renderBookDays(); fillStarts(editing ? editing.endMin - editing.startMin : undefined); openModal("bookScrim");
 }
 function firstBookableDay() {
   const s = state.settings;
@@ -700,13 +753,13 @@ function startOptions(dayKey) {
   for (let m = open; m + s.min_minutes <= close; m += s.slot_minutes) out.push({ m, disabled: freeRun(dayKey, m) < s.min_minutes });
   return out;
 }
-function fillStarts() {
+function fillStarts(preferLen) {
   const sel = $("bookStart"), opts = startOptions(state.selected.day);
   let start = state.selected.start;
   if (start == null || opts.find((o) => o.m === start)?.disabled !== false) start = opts.find((o) => !o.disabled)?.m ?? null;
   state.selected.start = start;
   sel.innerHTML = opts.map((o) => `<option value="${o.m}" ${o.disabled ? "disabled" : ""} ${o.m === start ? "selected" : ""}>${fmtMinLong(o.m)}${o.disabled ? " — booked" : ""}</option>`).join("");
-  fillEnds();
+  fillEnds(preferLen);
 }
 function fillEnds(prefer) {
   const s = state.settings, sel = $("bookEnd"), start = state.selected.start;
@@ -721,7 +774,7 @@ function updateSummary() {
   const d = state.days.find((x) => x.key === state.selected.day), start = state.selected.start, len = +$("bookEnd").value;
   $("bookSubmit").disabled = start == null || !len;
   $("bookSummary").innerHTML = start == null ? "No open times left this day." :
-    `${esc(d.dowLong)}, ${esc(d.monLong)} ${d.num} · ${fmtMinLong(start)} – ${fmtMinLong(start + len)}<small>Approved people on the notification list will be emailed.</small>`;
+    `${esc(d.dowLong)}, ${esc(d.monLong)} ${d.num} · ${fmtMinLong(start)} – ${fmtMinLong(start + len)}<small>${state.editing ? "Was " + esc(whenText(state.editing.day, state.editing.startMin, state.editing.endMin)) + ". Everyone in the booking and on the notification list will be emailed." : "Approved people on the notification list will be emailed."}</small>`;
 }
 $("bookStart").onchange = (e) => { state.selected.start = +e.target.value; fillEnds(+$("bookEnd").value || undefined); };
 $("bookEnd").onchange = updateSummary;
@@ -729,6 +782,13 @@ $("bookNote").oninput = (e) => { $("noteCount").textContent = `${e.target.value.
 $("bookBtn").onclick = () => openBook();
 $("bookSubmit").onclick = async () => {
   const btn = $("bookSubmit"), err = $("bookErr"); err.textContent = "";
+  if (state.editing) {
+    const b = state.editing, { day, start } = state.selected, len = +$("bookEnd").value;
+    if (start == null || !len) return;
+    state.editing = null; closeModal("bookScrim");
+    await commitMove(b, day, start, start + len);
+    return;
+  }
   const party = readSlots("bookSlots");
   if (party.error) { err.textContent = party.error; return; }
   const { day, start } = state.selected, len = +$("bookEnd").value, note = $("bookNote").value.trim() || null;
@@ -755,6 +815,149 @@ $("bookSubmit").onclick = async () => {
   } finally { btn.disabled = false; btn.textContent = "Confirm booking"; }
 };
 
+/* ---------- Modify: drag to move or resize, or "Change time" ---------- */
+// Only the booker (or an admin) can move a booking, and only before it starts.
+function canMove(b) {
+  if (!DEMO && !state.session) return false;
+  if (!(b.is_mine || isAdmin())) return false;
+  return zonedToDate(b.day, b.startMin) > new Date();
+}
+function whenText(dayKey, start, end) {
+  const d = state.days.find((x) => x.key === dayKey);
+  return `${d ? d.dowLong + ", " + d.monLong + " " + d.num : dayKey} · ${fmtMinLong(start)} – ${fmtMinLong(end)}`;
+}
+// Same rules the database enforces, checked live while dragging.
+function moveProblem(b, dayKey, start, end) {
+  const s = state.settings, open = toMin(s.open_time), close = toMin(s.close_time), d = state.days.find((x) => x.key === dayKey);
+  if (!d || d.i >= s.booking_window_days) return `You can only book up to ${s.booking_window_days} days ahead.`;
+  if (start < open || end > close) return `The court is bookable between ${fmtMinLong(open)} and ${fmtMinLong(close)}.`;
+  if (end - start < s.min_minutes || end - start > s.max_minutes) return `A booking must be between ${s.min_minutes} and ${s.max_minutes} minutes.`;
+  if (zonedToDate(dayKey, start) <= new Date()) return "That start time has already passed.";
+  const clash = state.bookings.find((x) => x.id !== b.id && x.day === dayKey && start < x.endMin && end > x.startMin);
+  if (clash) return `That overlaps ${clash.booker_name || "another booking"} (${fmtMinLong(clash.startMin)} – ${fmtMinLong(clash.endMin)}).`;
+  return null;
+}
+document.addEventListener("touchmove", (e) => { if (state.drag?.active) e.preventDefault(); }, { passive: false });
+document.addEventListener("contextmenu", (e) => { if (state.drag) e.preventDefault(); });
+function dragStart(ev, el, b) {
+  if (ev.button !== 0 || state.saving || state.pendingMove) return;
+  const s = state.settings, col = el.parentElement;
+  const touch = ev.pointerType === "touch";
+  const mode = ev.target.closest(".grip") ? "resize" : "move";
+  const grabMin = minuteAtRound(ev.clientY, col) ;
+  state.drag = { el, b, mode, touch, active: false, x0: ev.clientX, y0: ev.clientY, pointerId: ev.pointerId,
+    offset: grabMin - b.startMin, day: b.day, start: b.startMin, end: b.endMin, problem: null, timer: null };
+  if (touch) state.drag.timer = setTimeout(() => { if (state.drag && !state.drag.active) dragActivate(); }, 380);
+  window.addEventListener("pointermove", dragMove);
+  window.addEventListener("pointerup", dragEnd);
+  window.addEventListener("pointercancel", dragCancel);
+}
+function minuteAtRound(clientY, col) {
+  const s = state.settings, open = toMin(s.open_time), H = rowH();
+  return open + Math.round((clientY - col.getBoundingClientRect().top) / H) * s.slot_minutes;
+}
+function dragActivate() {
+  const dr = state.drag; dr.active = true;
+  if (navigator.vibrate) try { navigator.vibrate(12); } catch {}
+  const g = document.createElement("div"); g.className = "dropghost";
+  g.style.top = dr.el.style.top; g.style.height = dr.el.style.height; dr.el.parentElement.appendChild(g); dr.ghost = g;
+  dr.el.classList.add("dragging"); document.body.classList.add("is-dragging");
+  try { dr.el.setPointerCapture(dr.pointerId); } catch {}
+}
+function dragMove(ev) {
+  const dr = state.drag; if (!dr || ev.pointerId !== dr.pointerId) return;
+  const dx = ev.clientX - dr.x0, dy = ev.clientY - dr.y0;
+  if (!dr.active) {
+    if (dr.touch) { if (Math.hypot(dx, dy) > 8) dragCleanup(); return; }   // finger moved first: it's a scroll
+    if (Math.hypot(dx, dy) < 5) return;
+    dragActivate();
+  }
+  ev.preventDefault();
+  const s = state.settings, open = toMin(s.open_time), close = toMin(s.close_time), slot = s.slot_minutes, H = rowH();
+  const board = $("board"), br = board.getBoundingClientRect();
+  if (ev.clientX > br.right - 36) board.scrollLeft += 14; else if (ev.clientX < br.left + 90) board.scrollLeft -= 14;
+  let col = dr.el.parentElement;
+  if (dr.mode === "move") {
+    const cols = [...document.querySelectorAll(".daycol")];
+    col = cols.reduce((best, c) => { const r = c.getBoundingClientRect(); const dist = ev.clientX < r.left ? r.left - ev.clientX : ev.clientX > r.right ? ev.clientX - r.right : 0; return dist < best.d ? { c, d: dist } : best; }, { c: col, d: Infinity }).c;
+    const len = dr.b.endMin - dr.b.startMin;
+    let start = minuteAtRound(ev.clientY, col) - dr.offset;
+    start = Math.max(open, Math.min(close - len, start));
+    dr.day = col.dataset.day; dr.start = start; dr.end = start + len;
+  } else {
+    let end = minuteAtRound(ev.clientY, col);
+    end = Math.max(dr.b.startMin + slot, Math.min(close, end));
+    dr.end = end;
+  }
+  if (dr.el.parentElement !== col) col.appendChild(dr.el);
+  dr.el.style.top = ((dr.start - open) / slot) * H + 1 + "px";
+  dr.el.style.height = ((dr.end - dr.start) / slot) * H - 2 + "px";
+  const t = dr.el.querySelector(".t"); if (t) t.textContent = `${fmtMin(dr.start)} – ${fmtMin(dr.end)}`;
+  dr.problem = moveProblem(dr.b, dr.day, dr.start, dr.end);
+  dr.el.classList.toggle("bad", !!dr.problem);
+  dr.el.title = dr.problem || "Release to change the booking";
+}
+function dragEnd(ev) {
+  const dr = state.drag; if (!dr || ev.pointerId !== dr.pointerId) return;
+  if (!dr.active) { dragCleanup(); return; }          // a plain click: the click handler opens details
+  state.suppressClick = true; setTimeout(() => { state.suppressClick = false; }, 400);
+  const { b, day, start, end, problem } = dr;
+  dragCleanup();
+  if (day === b.day && start === b.startMin && end === b.endMin) { render(); return; }
+  if (problem) { render(); toast(problem); return; }
+  askMove(b, day, start, end);
+}
+function dragCancel() { if (state.drag?.active) dragAbort(); else dragCleanup(); }
+function dragAbort() { dragCleanup(); render(); }
+function dragCleanup() {
+  const dr = state.drag; if (!dr) return;
+  clearTimeout(dr.timer); dr.ghost?.remove();
+  dr.el.classList.remove("dragging", "bad"); document.body.classList.remove("is-dragging");
+  window.removeEventListener("pointermove", dragMove); window.removeEventListener("pointerup", dragEnd); window.removeEventListener("pointercancel", dragCancel);
+  state.drag = null;
+}
+function askMove(b, day, start, end) {
+  state.pendingMove = { b, day, start, end };
+  $("moveWas").textContent = whenText(b.day, b.startMin, b.endMin);
+  $("moveNow").textContent = whenText(day, start, end);
+  $("moveWho").textContent = (b.is_mine ? "" : `This is ${b.booker_name || "someone else"}'s booking. `) + "Everyone in the booking and on the notification list will be emailed the new time.";
+  $("moveErr").textContent = "";
+  openModal("moveScrim");
+}
+$("moveConfirm").onclick = async () => {
+  const pm = state.pendingMove; if (!pm) return;
+  state.pendingMove = null; closeModal("moveScrim");
+  await commitMove(pm.b, pm.day, pm.start, pm.end);
+};
+$("detailMove").onclick = () => { const b = state.detail; if (!b) return; closeModal("detailScrim"); openBook(b.day, b.startMin, b); };
+async function commitMove(b, day, start, end) {
+  const problem = moveProblem(b, day, start, end);
+  if (problem) { toast(problem); render(); return; }
+  state.saving = true;
+  const el = [...document.querySelectorAll(".bk")].find((x) => x.dataset.id === b.id);
+  if (el) el.classList.add("saving");
+  $("modbarText").textContent = `Modifying reservation · ${whenText(day, start, end)}`; $("modbar").hidden = false;
+  try {
+    if (DEMO) {
+      await new Promise((r) => setTimeout(r, 900));
+      Object.assign(b, mapBooking({ ...b, starts_at: zonedToDate(day, start).toISOString(), ends_at: zonedToDate(day, end).toISOString() }));
+    } else {
+      const { error } = await sb.rpc("move_booking", { p_id: b.id, p_starts_at: zonedToDate(day, start).toISOString(), p_ends_at: zonedToDate(day, end).toISOString() });
+      if (error) throw error;
+      sb.functions.invoke("notify-booking", { body: { booking_id: b.id, event: "modified" } }).catch(() => {});
+      syncCalendars();
+      await loadBookings();
+    }
+    state.saving = false; $("modbar").hidden = true; render();
+    toast("Reservation updated. Everyone in it has been emailed the new time.");
+  } catch (e) {
+    state.saving = false; $("modbar").hidden = true;
+    toast(e.code === "23P01" ? "Someone else has part of that time. The booking wasn't changed." : (e.message || "Couldn't change the booking."));
+    if (!DEMO) await loadBookings();
+    render();
+  }
+}
+
 /* ---------- Details / cancel ---------- */
 function openDetail(b) {
   state.detail = b;
@@ -778,6 +981,7 @@ function openDetail(b) {
     renderSlots("detailSlots", (b.booker_name || "Booker") + (b.is_mine ? " (you)" : ""), init);
   }
   $("detailCancel").hidden = !(future && (b.is_mine || isAdmin()));
+  $("detailMove").hidden = !canMove(b);
   openModal("detailScrim");
 }
 $("detailSavePlayers").onclick = async () => {
