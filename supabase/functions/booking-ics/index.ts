@@ -17,7 +17,7 @@ Deno.serve(async (req) => {
   if (!UUID.test(id)) return new Response("Not found", { status: 404 });
 
   const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, { auth: { persistSession: false } });
-  const { data: b } = await admin.from("bookings").select("id, starts_at, ends_at, booker_name, email, note, status, players, guest_entries").eq("id", id).maybeSingle();
+  const { data: b } = await admin.from("bookings").select("id, starts_at, ends_at, booker_name, email, note, status, players, guest_entries, revision").eq("id", id).maybeSingle();
   if (!b) return new Response("Not found", { status: 404 });
 
   const players: string[] = Array.isArray(b.players) ? b.players : [];
@@ -39,7 +39,7 @@ Deno.serve(async (req) => {
     `UID:${b.id}@shigeru-court`, `DTSTAMP:${icsDate(new Date())}`, `DTSTART:${icsDate(b.starts_at)}`, `DTEND:${icsDate(b.ends_at)}`,
     `SUMMARY:${icsText((cancelled ? "CANCELLED: " : "") + EVENT_TITLE)}`,
     `LOCATION:${icsText(EVENT_LOCATION)}`, `DESCRIPTION:${icsText(description)}`,
-    `STATUS:${cancelled ? "CANCELLED" : "CONFIRMED"}`, `SEQUENCE:${cancelled ? 1 : 0}`,
+    `STATUS:${cancelled ? "CANCELLED" : "CONFIRMED"}`, `SEQUENCE:${(b.revision ?? 0) + (cancelled ? 1 : 0)}`,
     ...(cancelled ? [] : ["BEGIN:VALARM", "TRIGGER:-PT60M", "ACTION:DISPLAY", `DESCRIPTION:${icsText(EVENT_TITLE)}`, "END:VALARM"]),
     "END:VEVENT", "END:VCALENDAR",
   ];
