@@ -24,3 +24,7 @@ language sql stable security definer set search_path = '' as $$
 $$;
 revoke all on function public.guest_directory() from public, anon;
 grant execute on function public.guest_directory() to authenticated;
+
+-- v2: one entry per person. Same email = same person (newest spelling of the
+-- name wins), so typos like "Baranovsky"/"Baronovsky" don't show up twice.
+-- (Applied as migration guest_directory_dedupe_by_email; see the live function.)
