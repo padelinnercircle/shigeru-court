@@ -525,13 +525,14 @@ function renderSlots(boxId, bookerLabel, initial) {
         <option value="g">Someone else…</option>
       </select>
       <div class="slotguest" hidden>
-        <input class="input gname" placeholder="Name" maxlength="60" aria-label="Player ${i + 2} name">
+        <input class="input gname" placeholder="Name" maxlength="60" list="guestList" autocomplete="off" aria-label="Player ${i + 2} name">
         <input class="input gemail" type="email" placeholder="Email (optional, to notify)" maxlength="254" aria-label="Player ${i + 2} email">
       </div></div>`;
     const sel = row.querySelector(".slotsel"), gbox = row.querySelector(".slotguest");
     if (v && v.type === "m") sel.value = "m:" + v.email;
     if (v && v.type === "g") { sel.value = "g"; gbox.hidden = false; row.querySelector(".gname").value = v.name || ""; row.querySelector(".gemail").value = v.email || ""; }
     sel.addEventListener("change", () => { gbox.hidden = sel.value !== "g"; if (sel.value === "g") row.querySelector(".gname").focus(); syncSlotOptions(boxId); });
+    wireGuestAutofill(row.querySelector(".gname"), row.querySelector(".gemail"));
     box.appendChild(row);
   }
   syncSlotOptions(boxId);
@@ -557,6 +558,27 @@ function readSlots(boxId) {
 }
 const partyEmails = (members, guests) => [...members, ...guests.map((g) => g.email).filter(Boolean)];
 const partyText = (b) => [b.booker_name || "Booked", ...(b.players || []), ...guestNames(b).map((g) => g + " (guest)")].join(", ");
+/* ---------- Guest book: past guests' emails fill in automatically ---------- */
+async function loadGuests() {
+  state.guestDir = [];
+  if (DEMO) state.guestDir = [{ name: "Lola Priego", email: "lola@example.com" }, { name: "Icaro Coelho", email: "icaro@example.com" }, { name: "Anna Baranovsky", email: null }];
+  else if (sb && state.session && approved()) { const { data, error } = await sb.rpc("guest_directory"); if (!error) state.guestDir = data || []; }
+  let dl = $("guestList");
+  if (!dl) { dl = document.createElement("datalist"); dl.id = "guestList"; document.body.appendChild(dl); }
+  dl.innerHTML = state.guestDir.map((g) => `<option value="${esc(g.name)}" label="${esc(g.email || "no email on file")}"></option>`).join("");
+}
+function guestByName(name) {
+  const k = String(name || "").trim().replace(/\s+/g, " ").toLowerCase();
+  return k ? (state.guestDir || []).find((g) => g.name.toLowerCase() === k) : null;
+}
+function wireGuestAutofill(nameEl, emailEl) {
+  nameEl.addEventListener("input", () => {
+    const g = guestByName(nameEl.value);
+    if (g && g.email && (!emailEl.value || emailEl.dataset.auto === "1")) { emailEl.value = g.email; emailEl.dataset.auto = "1"; emailEl.title = "Filled in from a past booking. Change it if needed."; }
+    else if (!g && emailEl.dataset.auto === "1") { emailEl.value = ""; emailEl.dataset.auto = ""; emailEl.title = ""; }
+  });
+  emailEl.addEventListener("input", () => { emailEl.dataset.auto = ""; emailEl.title = ""; });
+}
 async function loadAccess() {
   state.access = null;
   if (DEMO) { state.access = { email: "admin@example.com", full_name: "Demo Admin", can_book: true, is_admin: true, notify_on_booking: true }; return; }
@@ -805,7 +827,7 @@ $("bookSubmit").onclick = async () => {
         if (pErr) toast("Booked, but players couldn't be added: " + pErr.message);
       }
       sb.functions.invoke("notify-booking", { body: { booking_id: data.id, event: "created" } }).catch(() => {});
-      syncCalendars();
+      syncCalendars(); if (party.guests.length) loadGuests();
       await loadBookings();
     }
     closeModal("bookScrim"); render(); toast("Court booked. Notifications are on their way.");
@@ -996,7 +1018,7 @@ $("detailSavePlayers").onclick = async () => {
       const added = partyEmails(party.members, party.guests).filter((e) => !before.has(e));
       const { error } = await sb.rpc("set_booking_party", { p_booking: b.id, p_members: party.members, p_guests: party.guests }); if (error) throw error;
       if (added.length) sb.functions.invoke("notify-booking", { body: { booking_id: b.id, event: "added", emails: added } }).catch(() => {});
-      syncCalendars();
+      syncCalendars(); if (party.guests.length) loadGuests();
       await loadBookings();
     }
     closeModal("detailScrim"); render();
@@ -1178,10 +1200,10 @@ function demoBookings() {
 /* ---------- Boot ---------- */
 buildDays();
 if (!DEMO && sb) {
-  sb.auth.onAuthStateChange(async (_evt, session) => { state.session = session; await loadAccess(); await loadMembers(); await refresh(); });
+  sb.auth.onAuthStateChange(async (_evt, session) => { state.session = session; await loadAccess(); await loadMembers(); loadGuests(); await refresh(); });
   const { data } = await sb.auth.getSession(); state.session = data.session;
 }
-await loadSettings(); await loadAccess(); await loadMembers(); await refresh();
+await loadSettings(); await loadAccess(); await loadMembers(); loadGuests(); await refresh();
 setInterval(refresh, 60000);
 let lastMinute = nowLocal().min;
 setInterval(() => { const m = nowLocal().min; if (m !== lastMinute) { lastMinute = m; render(); } }, 15000);
